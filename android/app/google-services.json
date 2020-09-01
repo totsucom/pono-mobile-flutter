@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "544558067707",
+    "firebase_url": "https://pono-a5755.firebaseio.com",
+    "project_id": "pono-a5755",
+    "storage_bucket": "pono-a5755.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:544558067707:android:96bf0597bf39daf7c6a55e",
+        "android_client_info": {
+          "package_name": "com.example.pono_problem_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "544558067707-8hpn6grjmcod49gmbcsed28b9vq4oln4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAItz0NgaIgsr9FszB63nIb0VSYcBjkJLc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "544558067707-8hpn6grjmcod49gmbcsed28b9vq4oln4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
