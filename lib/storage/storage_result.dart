@@ -2,5 +2,5 @@
 class StorageResult {
   final String path;
   final String url;
-  StorageResult({String this.path = '', String this.url = ''}) {}
+  StorageResult({this.path = '', this.url = ''}) ;
 }

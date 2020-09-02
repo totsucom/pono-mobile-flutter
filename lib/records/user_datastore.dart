@@ -11,7 +11,7 @@ class UserDatastore {
   }
 
   static String getDocumentPath(String documentId) {
-    return "users/${documentId}";
+    return "users/$documentId";
   }
 
   /* documentIDを自動生成する場合
@@ -83,7 +83,7 @@ class UserDatastore {
   //最初にfirstWidget、ロードが完了したらcompleteTextを表示する。
   //completeText内に (displayName) 文字列があれば、それはdisplayNameに置換される。
   static Widget displayNameFutureBuilder(String userID,
-      [Widget firstWidget = null, String completeText = '{displayName}']) {
+      [Widget firstWidget, String completeText = '{displayName}']) {
     return FutureBuilder(
         future: UserDatastore.getUser(userID),
         builder: (context, future) {

@@ -1,26 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pono_problem_app/records/base_picture.dart';
 import 'package:pono_problem_app/records/base_picture_datastore.dart';
 import 'package:pono_problem_app/records/thumbnail_datastore.dart';
-import 'package:pono_problem_app/records/user_datastore.dart';
-import 'package:pono_problem_app/routes/base_picture_view_route.dart';
 import 'package:pono_problem_app/routes/edit_holds_route.dart';
-import 'package:pono_problem_app/storage/base_picture_storage.dart';
-import 'package:pono_problem_app/utils/content_type.dart';
-import 'package:pono_problem_app/utils/formatter.dart';
-import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/menu_item.dart';
-import 'package:pono_problem_app/utils/unique.dart';
-import '../globals.dart';
 import 'dart:ui' as UI;
 
 class _SelectBasePictureAppBarPopupMenuItem {
@@ -174,9 +161,10 @@ class _SelectBasePictureState extends State<SelectBasePicture> {
 
         //アルバムから撮影
         final pickedFile = await ImagePicker().getImage(
-            source: ImageSource.gallery,
-            maxWidth: BasePictureDatastore.BASE_PICTURE_MAX_WIDTH,
-            maxHeight: BasePictureDatastore.BASE_PICTURE_MAX_HEIGHT);
+          source: ImageSource.gallery,
+          //maxWidth: BasePictureDatastore.BASE_PICTURE_MAX_WIDTH,
+          //maxHeight: BasePictureDatastore.BASE_PICTURE_MAX_HEIGHT
+        );
         if (pickedFile == null || pickedFile.path == null) return;
 
         /*Uint8List bytes = pickedFile.readAsBytes() as Uint8List;
@@ -192,9 +180,10 @@ class _SelectBasePictureState extends State<SelectBasePicture> {
 
         //カメラで撮影
         final pickedFile = await ImagePicker().getImage(
-            source: ImageSource.camera,
-            maxWidth: BasePictureDatastore.BASE_PICTURE_MAX_WIDTH,
-            maxHeight: BasePictureDatastore.BASE_PICTURE_MAX_HEIGHT);
+          source: ImageSource.camera,
+          //maxWidth: BasePictureDatastore.BASE_PICTURE_MAX_WIDTH,
+          //maxHeight: BasePictureDatastore.BASE_PICTURE_MAX_HEIGHT
+        );
         if (pickedFile == null || pickedFile.path == null) return;
 
         /*Uint8List bytes = await pickedFile.readAsBytes();

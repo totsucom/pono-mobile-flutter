@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:pono_problem_app/storage/base_picture_storage.dart';
 import 'package:pono_problem_app/storage/storage_result.dart';
 import 'package:pono_problem_app/utils/unique.dart';
 import './base_picture.dart';
@@ -11,10 +10,13 @@ import 'dart:async';
 
 //basePictureコレクションを扱うツール
 class BasePictureDatastore {
+  /*Functionsで処理に変更
+
   //ベース写真の大きさ(ここは定義のみ)
   //アップロード時にUI側で調整
   static const double BASE_PICTURE_MAX_WIDTH = 1200;
   static const double BASE_PICTURE_MAX_HEIGHT = 1200;
+  */
 
   //Firestoreのコレクション名を返す
   static String getCollectionPath() {
@@ -23,20 +25,25 @@ class BasePictureDatastore {
 
   //Firestoreのドキュメントパスを返す
   static String getDocumentPath(String documentId) {
-    return "basePictures/${documentId}";
+    return "basePictures/$documentId";
   }
 
   //ドキュメントを追加する
   //成功時にDocumentIDを返す
   static Future<String> addBasePicture(
-      String name, String userID, File file) async {
+      String originalPath,
+      int rotation,
+      double trimLeft,
+      double trimTop,
+      double trimRight,
+      double trimBottom,
+      String name,
+      String userID) async {
     var completer = new Completer<String>();
     try {
-      //ベース写真をアップロード
-      final result = await _BasePictureStorage.upload(file);
-
       //BasePictureクラスを生成
-      var map = BasePicture(name, result.path, userID, pictureURL: result.url)
+      var map = BasePicture(originalPath, rotation, trimLeft, trimTop,
+              trimRight, trimBottom, name, userID)
           .toMap();
       //作成日を追加する
       map[BasePictureField.createdAt] = FieldValue.serverTimestamp();
@@ -176,7 +183,7 @@ class BasePictureDatastore {
       final basePictureDoc = await getBasePicture(documentID);
       final filePath = basePictureDoc.basePicture.picturePath;
       await Firestore.instance.document(getDocumentPath(documentID)).delete();
-      await _BasePictureStorage.delete(filePath);
+      await BasePictureStorage.delete(filePath);
       completer.complete(true);
       debugPrint("delete成功");
     } catch (e) {
@@ -208,24 +215,24 @@ class BasePictureDatastore {
 
 //Firebase storage内のベース写真を扱う
 //BasePictureDatastore経由で使用される
-class _BasePictureStorage {
+class BasePictureStorage {
   static String getFolderPath() {
     return "basePictures";
   }
 
   //アップロード
-  static Future<StorageResult> upload(File file) async {
+  static Future<StorageResult> upload(String localPath) async {
     var completer = new Completer<StorageResult>();
     try {
-      final filePath = getFolderPath() + '/' + Unique.FileName(file.path);
-      final contentType = ContentType.fromPath(file.path);
-      final StorageReference ref = FirebaseStorage().ref().child(filePath);
-      final StorageUploadTask uploadTask =
-          ref.putFile(file, StorageMetadata(contentType: contentType));
+      final storagePath = getFolderPath() + '/' + Unique.FileName(localPath);
+      final contentType = ContentType.fromPath(localPath);
+      final StorageReference ref = FirebaseStorage().ref().child(storagePath);
+      final StorageUploadTask uploadTask = ref.putFile(
+          File(localPath), StorageMetadata(contentType: contentType));
       StorageTaskSnapshot snapshot = await uploadTask.onComplete;
       final downloadURL = await snapshot.ref.getDownloadURL();
-      completer.complete(StorageResult(path: filePath, url: downloadURL));
-      debugPrint("upload成功");
+      completer.complete(StorageResult(path: storagePath, url: downloadURL));
+      debugPrint("upload成功 " + storagePath + " " + downloadURL);
     } catch (e) {
       completer.completeError(e.toString());
       debugPrint("upload失敗 " + e.toString());
@@ -234,12 +241,12 @@ class _BasePictureStorage {
   }
 
   //削除
-  static Future<bool> delete(String filePath) {
+  static Future<bool> delete(String path) {
     var completer = new Completer<bool>();
-    if (!filePath.startsWith(getFolderPath())) {
-      completer.completeError('${filePath}は${BasePicture.baseName}ファイルではありません');
+    if (!path.startsWith(getFolderPath())) {
+      completer.completeError('$pathは${BasePicture.baseName}ファイルではありません');
     } else {
-      final StorageReference ref = FirebaseStorage().ref().child(filePath);
+      final StorageReference ref = FirebaseStorage().ref().child(path);
       ref.delete().then((value) {
         completer.complete(true);
         debugPrint('delete成功');

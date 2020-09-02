@@ -49,7 +49,7 @@ class ProblemCompletedImageStorage {
     var completer = new Completer<bool>();
     if (!filePath.startsWith(getFolderPath())) {
       completer
-          .completeError('${filePath}は${Problem.baseName}のベース写真ファイルではありません');
+          .completeError('$filePathは${Problem.baseName}のベース写真ファイルではありません');
     } else {
       final StorageReference ref = FirebaseStorage().ref().child(filePath);
       ref.delete().then((value) {

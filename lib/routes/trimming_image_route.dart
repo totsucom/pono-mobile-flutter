@@ -1,22 +1,15 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:io';
 import 'dart:typed_data';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as UI;
-import 'package:image_picker/image_picker.dart';
-import 'package:pono_problem_app/general/primitive_ui.dart';
-import 'package:pono_problem_app/general/problem_painter.dart';
 import 'package:pono_problem_app/general/trimming_painter.dart';
-import 'package:pono_problem_app/records/primitive.dart';
-import 'package:pono_problem_app/records/problem.dart';
-import 'package:pono_problem_app/storage/problem_completed_image_storage.dart';
-import 'package:pono_problem_app/utils/menu_item.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/my_widget.dart';
-import 'package:pono_problem_app/utils/offset_ex.dart';
+import 'package:image/image.dart' as image;
 
 //MyPainterクラスからウィジェットの大きさを取得するために使用する
 GlobalKey _toolBarGlobalKey = GlobalKey();
@@ -25,47 +18,89 @@ GlobalKey _toolBarGlobalKey = GlobalKey();
 class TrimmingImageArgs {
   final title;
   final double initTrimLeft, initTrimTop, initTrimRight, initTrimBottom;
-  String _imageURL;
-  PickedFile _pickedImage;
-  UI.Image _cachedImage; //描画毎に無限ダウンロードしてしまうので、キャッシュは必須
+  final String imageURL;
+  final String filePath;
+  List<UI.Image> _cachedImage; //描画毎に無限ダウンロードしてしまうので、キャッシュは必須
 
-  //コンストラクタにはいずれかのパラメータを渡す
-  TrimmingImageArgs(
-      {imageURL,
-      pickedBasePicture,
-      this.title = 'トリミング',
+  //コンストラクタにはimageURLまたはfilePathの、いずれかのパラメータを渡す
+  //使用しない方にはnullを設定する
+  TrimmingImageArgs(this.imageURL, this.filePath,
+      {this.title = 'トリミング',
       this.initTrimLeft = 0.0,
       this.initTrimTop = 0.0,
       this.initTrimRight = 0.0,
       this.initTrimBottom = 0.0}) {
-    this._imageURL = imageURL;
-    this._pickedImage = pickedBasePicture;
-    if (imageURL == null && pickedBasePicture == null) {
-      throw Exception('trimming_image_routeにイメージを渡す必要があります');
+    if (imageURL == null && filePath == null) {
+      throw Exception('TrimmingImageArgsにイメージを渡す必要があります');
     }
   }
 
+  //UI上の処理だけなので、動作を軽るするのに長辺をMAX_SIZEに縮小する
+  static List<List<int>> bytesToImageBytes(Uint8List bytes) {
+    const MAX_SIZE = 480;
+
+    //Image package を使用
+
+    //Imageインスタンスを作成
+    image.Image baseSizeImage = image.decodeImage(bytes);
+
+    //長辺に合わせてリサイズ
+    image.Image resizeImage;
+    if (baseSizeImage.width > baseSizeImage.height)
+      resizeImage = image.copyResize(baseSizeImage, width: MAX_SIZE);
+    else
+      resizeImage = image.copyResize(baseSizeImage, height: MAX_SIZE);
+    baseSizeImage = null;
+
+    //Exif Orientationに合わせて向きを修正
+    image.Image bakedImage = image.bakeOrientation(resizeImage);
+    resizeImage = null;
+
+    List<List<int>> list = [image.encodePng(bakedImage, level: 1)];
+    for (var angle = 90; angle <= 270; angle += 90) {
+      list.add(image.encodePng(image.copyRotate(bakedImage, angle), level: 1));
+    }
+    return list;
+    //return image.encodePng(bakedImage, level: 1);
+    //return image.encodeJpg(resizeImage, quality: 60);
+    //return image.encodeJpg(resizeImage);
+  }
+
   //イメージをダウンロードするためにFutureBuilderで使用する
-  Future<UI.Image> getImageFutureBuilder() async {
-    var completer = new Completer<UI.Image>();
+  Future<List<UI.Image>> getImageFutureBuilder() async {
+    var completer = new Completer<List<UI.Image>>();
     if (_cachedImage != null) {
       completer.complete(_cachedImage);
     } else {
-      if (_imageURL != null) {
+      if (imageURL != null) {
         try {
           final bundle =
-              await NetworkAssetBundle(Uri.parse(_imageURL)).load(_imageURL);
+              await NetworkAssetBundle(Uri.parse(imageURL)).load(imageURL);
           Uint8List bytes = bundle.buffer.asUint8List();
-          _cachedImage = await decodeImageFromList(bytes);
+          //この関数は重くUIが止まってしまうので、非同期で実行
+          List<List<int>> newBytes = await compute(bytesToImageBytes, bytes);
+          _cachedImage = <UI.Image>[
+            await decodeImageFromList(newBytes[0]),
+            await decodeImageFromList(newBytes[1]),
+            await decodeImageFromList(newBytes[2]),
+            await decodeImageFromList(newBytes[3])
+          ];
           debugPrint("イメージをダウンロードしました");
           completer.complete(_cachedImage);
         } catch (e) {
           completer.completeError(e);
         }
-      } else if (_pickedImage != null) {
+      } else if (filePath != null) {
         try {
-          Uint8List bytes = await _pickedImage.readAsBytes();
-          _cachedImage = await decodeImageFromList(bytes);
+          Uint8List bytes = await File(filePath).readAsBytes();
+          //この関数は重くUIが止まってしまうので、非同期で実行
+          List<List<int>> newBytes = await compute(bytesToImageBytes, bytes);
+          _cachedImage = <UI.Image>[
+            await decodeImageFromList(newBytes[0]),
+            await decodeImageFromList(newBytes[1]),
+            await decodeImageFromList(newBytes[2]),
+            await decodeImageFromList(newBytes[3])
+          ];
           debugPrint("イメージを読み込みました");
           completer.complete(_cachedImage);
         } catch (e) {
@@ -79,6 +114,16 @@ class TrimmingImageArgs {
   }
 }
 
+//このrouteがpopする場合に戻すパラメータ
+class TrimmingResult {
+  final String imageURL;
+  final String filePath;
+  final int rotation;
+  final double trimLeft, trimTop, trimRight, trimBottom;
+  TrimmingResult(this.imageURL, this.filePath, this.rotation, this.trimLeft,
+      this.trimTop, this.trimRight, this.trimBottom);
+}
+
 class TrimmingImage extends StatefulWidget {
   TrimmingImage({Key key}) : super(key: key);
 
@@ -90,22 +135,28 @@ class _TrimmingImageState extends State<TrimmingImage> {
   //前画面から渡されたパラメータを保持
   TrimmingImageArgs _arguments;
 
-  //onTap処理のため、onPanDown時の座標を記憶
-  Offset _panDowmPosition;
-
   //MyPainterクラスに渡す、描画パラメータを保持
   TrimmingPainter _paintArgs;
+
+  //SnackBar表示用
+  var _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => afterBuild(context));
+  }
+
+  //buildが完了したときに呼び出される
+  void afterBuild(context) async {
+    MyDialog.hintSnackBar(_scaffoldKey, '画像の高さ≒壁の高さが適当です');
   }
 
   @override
   Widget build(BuildContext context) {
     if (_paintArgs == null) {
-      _paintArgs = TrimmingPainter(
-          Theme.of(context).bottomAppBarColor, Theme.of(context).primaryColor);
+      _paintArgs =
+          TrimmingPainter(Theme.of(context).primaryColor, Colors.purpleAccent);
     }
 
     if (_arguments == null) {
@@ -125,6 +176,7 @@ class _TrimmingImageState extends State<TrimmingImage> {
         //WillPopScopeで戻るボタンのタップをキャッチ
         onWillPop: _requestPop,
         child: Scaffold(
+          key: _scaffoldKey,
           appBar: AppBar(
             title: Text(_arguments.title),
             centerTitle: true,
@@ -132,7 +184,7 @@ class _TrimmingImageState extends State<TrimmingImage> {
               FlatButton(
                 child: Icon(Icons.check,
                     color: Theme.of(context).primaryColorLight),
-                onPressed: _moveToProblemEdit,
+                onPressed: _trimmingCompleted,
               ),
             ],
           ),
@@ -145,9 +197,9 @@ class _TrimmingImageState extends State<TrimmingImage> {
                 if (future.hasError)
                   return MyWidget.error(context, future.error.toString());
 
-                if (_paintArgs.image == null) {
+                if (_paintArgs.images == null) {
                   //ダウンロードしたイメージを登録
-                  _paintArgs.image = future.data;
+                  _paintArgs.images = future.data;
                 }
 
                 return Stack(children: <Widget>[
@@ -160,25 +212,29 @@ class _TrimmingImageState extends State<TrimmingImage> {
                     // TapDownイベントを検知
                     //onTapDown: _addPoint,
                     onTap: () {
-                      //debugPrint("onTap");
-                      _selectEdge(_panDowmPosition);
+                      debugPrint("onTap");
                     },
                     onPanDown: (details) {
                       //debugPrint("onPanDown");
-                      _panDowmPosition = details.localPosition;
+                      _selectEdge(details.localPosition);
                     },
                     onPanCancel: () {
-                      debugPrint("onPanCancel");
+                      //debugPrint("onPanCancel");
+                      _paintArgs.activeEdge = ActiveEdge.None;
+                      if (_paintArgs.isUpdated) setState(() {});
                     },
                     onPanStart: (detail) {
                       debugPrint("onPanStart");
                     },
                     onPanUpdate: (details) {
                       //debugPrint("onPanUpdate");
-                      _moveEdge(details.delta.dx, details.delta.dy);
+                      if (_paintArgs.activeEdge != ActiveEdge.None)
+                        _moveEdge(details.delta.dx, details.delta.dy);
                     },
                     onPanEnd: (detail) {
-                      debugPrint("onPanEnd");
+                      //debugPrint("onPanEnd");
+                      _paintArgs.activeEdge = ActiveEdge.None;
+                      if (_paintArgs.isUpdated) setState(() {});
                     },
 
                     // カスタムペイント
@@ -223,8 +279,15 @@ class _TrimmingImageState extends State<TrimmingImage> {
   }
 
   //appBarのチェックボタン "✔" がタップされた
-  void _moveToProblemEdit() async {
-    //TODO どういう出力形式が必要だろうか?
+  void _trimmingCompleted() async {
+    Navigator.of(context).pop(TrimmingResult(
+        _arguments.imageURL, //元画像(ネットワークイメージの場合)
+        _arguments.filePath, //元画像(ローカルファイルの場合)
+        _paintArgs.rotation, //画像の回転角(0,90,180,270度) このほかに元画像がExifを持っていることがある
+        _paintArgs.trimLeft, //トリミング結果 0.0～1.0
+        _paintArgs.trimTop,
+        _paintArgs.trimRight,
+        _paintArgs.trimBottom));
   }
 
   //タップされたときのエッジ選択処理
@@ -232,15 +295,51 @@ class _TrimmingImageState extends State<TrimmingImage> {
     if (!_paintArgs.isReady || _paintArgs.canvasSize.width <= 0)
       return; //準備ができてない
 
-    //<TODO> インプリメント
+    double d, distance = 1000.0;
+    ActiveEdge edge = ActiveEdge.None;
+    d = (_paintArgs.leftKnob - touchPos).distance;
+    if (d < distance) {
+      distance = d;
+      edge = ActiveEdge.LeftEdge;
+    }
+    d = (_paintArgs.topKnob - touchPos).distance;
+    if (d < distance) {
+      distance = d;
+      edge = ActiveEdge.TopEdge;
+    }
+    d = (_paintArgs.rightKnob - touchPos).distance;
+    if (d < distance) {
+      distance = d;
+      edge = ActiveEdge.RightEdge;
+    }
+    d = (_paintArgs.bottomKnob - touchPos).distance;
+    if (d < distance) {
+      distance = d;
+      edge = ActiveEdge.BottomEdge;
+    }
+    if (distance < 20.0) _paintArgs.activeEdge = edge;
+    if (_paintArgs.isUpdated) setState(() {});
   }
 
   //ドラッグによりベース写真を移動する
   void _moveEdge(double delta_x, double delta_y) {
-    if (!_paintArgs.isReady || _paintArgs.canvasSize.width <= 0)
-      return; //準備ができてない
-
-    //<TODO> インプリメント
+    if (_paintArgs.drawSize == null) return;
+    switch (_paintArgs.activeEdge) {
+      case ActiveEdge.LeftEdge:
+        _paintArgs.trimLeft += delta_x / _paintArgs.drawSize.width;
+        break;
+      case ActiveEdge.TopEdge:
+        _paintArgs.trimTop += delta_y / _paintArgs.drawSize.height;
+        break;
+      case ActiveEdge.RightEdge:
+        _paintArgs.trimRight -= delta_x / _paintArgs.drawSize.width;
+        break;
+      case ActiveEdge.BottomEdge:
+        _paintArgs.trimBottom -= delta_y / _paintArgs.drawSize.height;
+        break;
+      default:
+    }
+    if (_paintArgs.isUpdated) setState(() {});
   }
 
   //画面上部のツールバーを作成
@@ -252,12 +351,16 @@ class _TrimmingImageState extends State<TrimmingImage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
             IconButton(
-              icon: Icon(Icons.rotate_left),
+              icon: Icon(Icons.rotate_left, color: Colors.white),
               onPressed: () {
-                //<TODO> インプリメント
+                setState(() {
+                  _paintArgs.rotateLeft();
+                });
               },
             ),
-            Expanded(child: Text('左に回転', style: TextStyle(fontSize: 12.0)))
+            Expanded(
+                child: Text('左に回転',
+                    style: TextStyle(color: Colors.white, fontSize: 12.0)))
           ]),
       Column(
           //右回転ポップアップメニュー
@@ -265,12 +368,16 @@ class _TrimmingImageState extends State<TrimmingImage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
             IconButton(
-              icon: Icon(Icons.rotate_right),
+              icon: Icon(Icons.rotate_right, color: Colors.white),
               onPressed: () {
-                //<TODO> インプリメント
+                setState(() {
+                  _paintArgs.rotateRight();
+                });
               },
             ),
-            Expanded(child: Text('右に回転', style: TextStyle(fontSize: 12.0)))
+            Expanded(
+                child: Text('右に回転',
+                    style: TextStyle(color: Colors.white, fontSize: 12.0)))
           ]),
     ];
   }
@@ -283,7 +390,7 @@ class MyTrimmingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(MyTrimmingPainter oldDelegate) {
-    return true; //_paintArgs.isUpdatedAndReset;
+    return _paintArgs.isUpdatedAndReset;
   }
 
   @override
@@ -303,10 +410,9 @@ class MyTrimmingPainter extends CustomPainter {
     //メインの描画
     _paintArgs.paint(canvas, canvasSize, toolBarSize.height);
 
-    //画面上部のツールバーと画面下部のスライダーの背景を半透明で塗りつぶして
-    //UIが見えるようにする
+    //画面上部のツールバーの背景を塗りつぶしてUIが見えるようにする
     final paint = Paint();
-    paint.color = this._paintArgs.toolBarBackgroundColor;
+    paint.color = Colors.black38;
     canvas.drawRect(
         Rect.fromLTWH(0, 0, canvasSize.width, toolBarSize.height), paint);
   }

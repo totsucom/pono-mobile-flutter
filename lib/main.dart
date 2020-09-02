@@ -29,9 +29,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
         title: 'Firebase Auth デモ',
-        theme: ThemeData(
+        /*theme: ThemeData(
           primarySwatch: Colors.blue,
-        ),
+        ),*/
 
         //これにより Navigator に '/' がスタックされた状態でログイン画面が表示される
         //つまりログイン成功時に、ログイン画面から pop() でホーム画面に戻って来られる

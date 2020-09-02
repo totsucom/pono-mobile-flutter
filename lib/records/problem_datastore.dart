@@ -1,9 +1,3 @@
-import 'package:pono_problem_app/storage/problem_base_picture_storage.dart';
-
-import './problem.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:async';
-import 'dart:ui' as UI;
 
 //problemsコレクションを扱うツール
 class ProblemDatastore {

@@ -1,15 +1,14 @@
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pono_problem_app/records/base_picture.dart';
 import 'package:pono_problem_app/records/base_picture_datastore.dart';
-import 'package:pono_problem_app/records/thumbnail_datastore.dart';
 import 'package:pono_problem_app/records/user_datastore.dart';
 import 'package:pono_problem_app/routes/base_picture_view_route.dart';
 import 'package:pono_problem_app/routes/trimming_image_route.dart';
-import 'package:pono_problem_app/storage/base_picture_storage.dart';
+import 'package:pono_problem_app/storage/storage_result.dart';
 import 'package:pono_problem_app/utils/formatter.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/my_widget.dart';
@@ -146,12 +145,16 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
 
     Widget leadingWidget;
     if (basePictureDoc.basePicture.thumbnailURL.length == 0) {
-      final duration =
-          DateTime.now().difference(basePictureDoc.basePicture.createdAt);
-      if (duration.inMinutes > 2)
-        //2分越えてURLが無いのはエラーしかない
-        leadingWidget = Icon(Icons.error, color: Theme.of(context).errorColor);
-      else
+      if (basePictureDoc.basePicture.createdAt != null) {
+        // ↑ 瞬間nullのパターンが発生するみたい
+        final duration =
+            DateTime.now().difference(basePictureDoc.basePicture.createdAt);
+        if (duration.inMinutes > 2)
+          //2分越えてURLが無いのはエラーしかない
+          leadingWidget =
+              Icon(Icons.error, color: Theme.of(context).errorColor);
+      }
+      if (leadingWidget == null)
         //CloudFunctuins処理待ち(エラー表示回避)
         leadingWidget = CircularProgressIndicator();
     } else {
@@ -254,14 +257,19 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
         source: (selectResult.value == 1)
             ? ImageSource.gallery
             : ImageSource.camera,
-        maxWidth: BasePictureDatastore.BASE_PICTURE_MAX_WIDTH,
-        maxHeight: BasePictureDatastore.BASE_PICTURE_MAX_HEIGHT);
+        //重いのでざっくり縮小
+        maxWidth: 1200,
+        maxHeight: 1200);
     if (pickedFile == null || pickedFile.path == null) return;
 
-    Navigator.of(context).pushNamed('/edit_problem/trimming_image',
-        arguments: TrimmingImageArgs(pickedBasePicture: pickedFile));
-
-//TODO 下記はとりあえずコメントアウト
+    //トリミング
+    final trimResult = await Navigator.of(context).pushNamed(
+        '/edit_problem/trimming_image',
+        arguments: TrimmingImageArgs(null, pickedFile.path)) as TrimmingResult;
+    if (trimResult == null) {
+      File(pickedFile.path).deleteSync();
+      return;
+    }
 /*
     //トリミング
     var croppedFile = await ImageCropper.cropImage(
@@ -277,21 +285,49 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
           minimumAspectRatio: 1.0,
         ));
     if (croppedFile == null || croppedFile.path == null) return;
+*/
 
-    //名前の入力
-    final MyDialogTextResult inputResult = await MyDialog.inputText(context,
-        caption: BasePicture.baseName,
-        labelText: BasePictureFieldCaption.name,
-        hintText: 'A壁 など',
-        minTextLength: 1,
-        maxTextLength: 20);
-    if (inputResult == null || inputResult.result != MyDialogResult.OK) return;
+    //名前入力の裏で写真のアップロードを始める
+    List<Future> futureList = [
+//ベース写真をアップロード
+      BasePictureStorage.upload(trimResult.filePath),
+      //名前の入力
+      MyDialog.inputText(context,
+          caption: BasePicture.baseName,
+          labelText: BasePictureFieldCaption.name,
+          hintText: 'A壁 など',
+          minTextLength: 1,
+          maxTextLength: 20)
+    ];
+    final waitResult = await Future.wait(futureList);
+    final StorageResult storageResult = waitResult[0];
+    final MyDialogTextResult inputResult = waitResult[1];
 
-    //これ以降はユーザーを待たせないために await しない
+    //ローカルファイルを削除
+    File(pickedFile.path).deleteSync();
+
+    if (inputResult == null || inputResult.result != MyDialogResult.OK) {
+      //入力がキャンセルされた
+      if (storageResult != null) BasePictureStorage.delete(storageResult.path);
+      return;
+    }
+
+    if (storageResult == null) {
+      //ファイルアップロード失敗
+      MyDialog.errorSnackBar(_scaffoldKey, '写真をアップロードできませんでした');
+      return;
+    }
 
     //ベース写真の追加
     BasePictureDatastore.addBasePicture(
-            inputResult.text, Globals.firebaseUser.uid, croppedFile)
+            storageResult.path,
+            trimResult.rotation,
+            trimResult.trimLeft,
+            trimResult.trimTop,
+            trimResult.trimRight,
+            trimResult.trimBottom,
+            inputResult.text,
+            Globals.firebaseUser.uid)
         .then((String documentID) {
       //成功
       MyDialog.successfulSnackBar(_scaffoldKey, '追加しました');
@@ -299,6 +335,5 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
       //失敗
       MyDialog.errorSnackBar(_scaffoldKey, '追加できませんでした\n' + err.toString());
     });
-*/
   }
 }

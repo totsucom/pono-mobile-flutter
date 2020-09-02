@@ -25,6 +25,6 @@ class RectEx {
 
   //DB保存用
   String toDbString() {
-    return '${_x},${_y},${_w},${_h}';
+    return '$_x,$_y,$_w,$_h';
   }
 }

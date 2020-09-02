@@ -12,6 +12,8 @@ class OffsetEx {
     return Offset(_x, _y);
   }
 
+  OffsetEx.fromXY(this._x, this._y);
+
   //DB読み込み用
   OffsetEx.fromDbString(String str) {
     List<String> ar = str.split(',');
@@ -22,7 +24,7 @@ class OffsetEx {
 
   //DB保存用
   String toDbString() {
-    return '${_x},${_y}';
+    return '$_x,$_y';
   }
 
   //Rectの範囲内にあるか

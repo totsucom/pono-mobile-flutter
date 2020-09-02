@@ -1,4 +1,3 @@
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
 enum MyDialogResult { OK, Cancel, Yes, No }
@@ -238,10 +237,47 @@ class MyDialog {
   }
  */
 
+  /*
+   * SnackBarは画面下にツールチップのように表示するものです。
+   * var _scaffoldKey = GlobalKey<ScaffoldState>();
+   * のようにグローバルキーを作成して、Scaffoldのkeyに設定しておきます。
+   * 表示する場合は下記のようにします。
+   * MyDialog.successfulSnackBar(_scaffoldKey, '削除しました');
+   */
+
   static successfulSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text) {
     scaffoldKey.currentState.showSnackBar(SnackBar(
       content: Row(children: <Widget>[
         Icon(Icons.check, color: Colors.greenAccent),
+        Text(text)
+      ]),
+      duration: const Duration(seconds: 10),
+      action: SnackBarAction(
+        label: 'OK',
+        onPressed: () {},
+      ),
+    ));
+  }
+
+  static informationSnackBar(
+      GlobalKey<ScaffoldState> scaffoldKey, String text) {
+    scaffoldKey.currentState.showSnackBar(SnackBar(
+      content: Row(children: <Widget>[
+        Icon(Icons.info_outline, color: Colors.blueAccent),
+        Text(text)
+      ]),
+      duration: const Duration(seconds: 10),
+      action: SnackBarAction(
+        label: 'OK',
+        onPressed: () {},
+      ),
+    ));
+  }
+
+  static hintSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text) {
+    scaffoldKey.currentState.showSnackBar(SnackBar(
+      content: Row(children: <Widget>[
+        Icon(Icons.lightbulb_outline, color: Colors.yellow),
         Text(text)
       ]),
       duration: const Duration(seconds: 10),

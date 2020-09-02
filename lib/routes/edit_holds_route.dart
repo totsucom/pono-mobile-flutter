@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:typed_data';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +9,6 @@ import 'package:pono_problem_app/general/primitive_ui.dart';
 import 'package:pono_problem_app/general/problem_painter.dart';
 import 'package:pono_problem_app/records/primitive.dart';
 import 'package:pono_problem_app/records/problem.dart';
-import 'package:pono_problem_app/storage/problem_completed_image_storage.dart';
 import 'package:pono_problem_app/utils/menu_item.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/my_widget.dart';
@@ -351,17 +348,17 @@ class _EditHoldsState extends State<EditHolds> {
   }
 
   //ドラッグによりベース写真を移動する
-  void _moveBaseImage(double delta_x, double delta_y) {
+  void _moveBaseImage(double deltaX, double deltaY) {
     if (!_paintArgs.isReady || _paintArgs.actualScale <= 0.0) return; //準備ができてない
 
     //新しいベース写真の表示位置を計算
     var x = _paintArgs.baseImagePosition.dx;
-    x -= delta_x / _paintArgs.actualScale;
+    x -= deltaX / _paintArgs.actualScale;
     if (x < 0.0) x = 0.0;
     if (x >= _paintArgs.baseImage.width) x = _paintArgs.baseImage.width - 1.0;
 
     var y = _paintArgs.baseImagePosition.dy;
-    y -= delta_y / _paintArgs.actualScale;
+    y -= deltaY / _paintArgs.actualScale;
     if (y < 0.0) y = 0.0;
     if (y >= _paintArgs.baseImage.height) y = _paintArgs.baseImage.height - 1.0;
 

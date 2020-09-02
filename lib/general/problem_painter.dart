@@ -111,7 +111,7 @@ class ProblemPainter {
 
   int get selectedPrimitiveIndex => _selectedPrimitiveIndex;
 
-  void set selectedPrimitiveIndex(int newIndex) {
+  set selectedPrimitiveIndex(int newIndex) {
     if (_selectedPrimitiveIndex != newIndex) _updated = true;
     _selectedPrimitiveIndex = newIndex;
     //selectedPrimitiveIndexの値を各プリミティブクラスに反映

@@ -1,9 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:pono_problem_app/records/problem.dart';
-import 'package:pono_problem_app/records/problem_datastore.dart';
 import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user_datastore.dart';
 import 'package:pono_problem_app/utils/menu_item.dart';
@@ -23,7 +20,7 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   NetworkImage _avatarIcon;
-  var _loginMessage = '';
+  String _loginMessage = '';
 
   //appBarのポップアップメニュー
   List<MenuItem<String>> _appBarPopupMenuItems = [
@@ -191,12 +188,12 @@ class _HomeState extends State<Home> {
   void setLoginStatus([String errorMessage = '']) {
     setState(() {
       if (Globals.ponoUser != null) {
-        _loginMessage = 'ようこそ。 ${Globals.ponoUser.displayName} さん';
-        _avatarIcon = NetworkImage(Globals.ponoUser.iconURL);
+        this._loginMessage = 'ようこそ。 ${Globals.ponoUser.displayName} さん';
+        this._avatarIcon = NetworkImage(Globals.ponoUser.iconURL);
       } else {
-        _loginMessage =
+        this._loginMessage =
             (errorMessage.length == 0) ? 'ログインしていません' : errorMessage;
-        _avatarIcon = null;
+        this._avatarIcon = null;
       }
     });
   }

@@ -1,9 +1,6 @@
-import 'dart:ffi';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-
 import './thumbnail.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
@@ -20,7 +17,7 @@ class ThumbnailDatastore {
   }
 
   static String getDocumentPath(String documentId) {
-    return "thumbnails/${documentId}";
+    return "thumbnails/$documentId";
   }
 
   //thumbnailを取得する
