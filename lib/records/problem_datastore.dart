@@ -1,4 +1,3 @@
-
 //problemsコレクションを扱うツール
 class ProblemDatastore {
   //Firestoreのコレクション名を返す

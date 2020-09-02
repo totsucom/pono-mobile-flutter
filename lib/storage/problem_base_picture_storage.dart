@@ -48,8 +48,7 @@ class ProblemBasePictureStorage {
   static Future<bool> delete(String filePath) {
     var completer = new Completer<bool>();
     if (!filePath.startsWith(getFolderPath())) {
-      completer
-          .completeError('$filePathは${Problem.baseName}のベース写真ファイルではありません');
+      completer.completeError('$filePathは${Problem.baseName}のベース写真ファイルではありません');
     } else {
       final StorageReference ref = FirebaseStorage().ref().child(filePath);
       ref.delete().then((value) {
