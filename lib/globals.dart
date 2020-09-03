@@ -1,42 +1,51 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pono_problem_app/records/user.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'my_theme.dart';
 import 'signin.dart';
 
 class Globals {
-  //パブリック
+  //ログイン関連
   static FirebaseUser firebaseUser;
   static LoginMethod currentLoginMethod = LoginMethod.None;
+  static UserDocument ponoUser;
 
-  static User ponoUser;
+  //static SharedPreferences _prefs;
 
-
-  static const EMPTY_IMAGE = 'https://firebasestorage.googleapis.com/v0/b/pono-a5755.appspot.com/o/images%2Fempty.jpg?alt=media&token=6af7f9d0-bf73-4bd2-9260-b0abf89026a8';
-
-
-  //プライベート
-  static SharedPreferences _prefs;
+  //ログイン方法の取得と設定
   static LoginMethod _loginMethod = LoginMethod.None;
-
-
-  static LoginMethod getLoginMethod() {
-    return _loginMethod;
+  static LoginMethod get loginMethod => _loginMethod;
+  static set loginMethod(LoginMethod newMethod) {
+    _loginMethod = newMethod;
   }
 
-  static setLoginMethod(LoginMethod lm) {
-    _loginMethod = lm;
-    _prefs.setInt("LoginMethod", lm.index);
+  //ダークテーマの取得と設定
+  static bool _darkTheme = false;
+  static bool get darkTheme => _darkTheme;
+  static set darkTheme(bool newTheme) {
+    _darkTheme = newTheme;
   }
-
 
   //設定を読み込む
   //アプリの最初に１度だけ呼び出す
   static Future<bool> loadSettings() async {
-    _prefs = await SharedPreferences.getInstance();
+    final _prefs = await SharedPreferences.getInstance();
+    assert(_prefs != null);
 
-    var lm = _prefs.getInt("LoginMethod");
-    _loginMethod = (lm == null) ? LoginMethod.None : LoginMethod.values[lm];
+    var lm = _prefs.getInt("LoginMethod") ?? LoginMethod.None.index;
+    _loginMethod = LoginMethod.values[lm];
 
+    _darkTheme = _prefs.getBool("DarkTheme") ?? false;
+
+    return true;
+  }
+
+  static Future<bool> saveSettings() async {
+    final _prefs = await SharedPreferences.getInstance();
+    assert(_prefs != null);
+    _prefs.setInt("LoginMethod", loginMethod.index);
+    _prefs.setBool("DarkTheme", darkTheme);
     return true;
   }
 

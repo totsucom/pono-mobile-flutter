@@ -32,6 +32,13 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => afterBuild(context));
+  }
+
+  //buildが完了したときに呼び出される
+  void afterBuild(context) async {
+    MyDialog.informationSnackBar(
+        _scaffoldKey, 'ここで壁の写真を登録しておくと、ユーザーは課題作成時に選んで使用できるようになります。');
   }
 
   @override

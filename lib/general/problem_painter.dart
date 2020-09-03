@@ -72,14 +72,14 @@ class ProblemPainter {
   Size canvasSize = Size(0, 0);
 
   //選択したプリミティブを描画する（破線を動かす）際に使うラインパターンインデックス
-  int _patternIndex = 0;
+  Animation<int> patternIndex;
 
-  int get patternIndex => _patternIndex;
+  /*int get patternIndex => _patternIndex;
 
   set patternIndex(int newIndex) {
-    if (_patternIndex != newIndex) _updated = true;
+    //if (_patternIndex != newIndex) _updated = true;
     _patternIndex = newIndex;
-  }
+  }*/
 
   //プリミティブ(Primitive)のリスト
   final primitives = <PrimitiveUI>[];
@@ -138,22 +138,27 @@ class ProblemPainter {
 
     if (!this.isReady) return;
 
-    //背景を黒に塗りつぶす
-    final paint = Paint();
-    paint.color = Colors.black;
-    var rect = Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height);
-    canvas.drawRect(rect, paint);
+    //描画エリア全体
+    final canvasRect = Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height);
 
-    //ベース写真を表示
+    //ベース写真の描画エリア
     final srcHeight = this.baseImage.height / (2.0 * this.displaySize);
     final srcWidth = canvasSize.width / canvasSize.height * srcHeight;
     final srcX = this.baseImagePosition.dx - srcWidth / 2.0;
     final srcY = this.baseImagePosition.dy - srcHeight / 2.0;
-    canvas.drawImageRect(
-        this.baseImage,
-        Rect.fromLTWH(srcX, srcY, srcWidth, srcHeight),
-        Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height),
-        paint);
+    final imageRect = Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height);
+
+    // TODO
+    //キャンバスと描画エリアの重なり具合から、背景色の塗りつぶし処理を低減する
+
+    //背景を黒に塗りつぶす
+    final paint = Paint();
+    paint.color = Colors.black;
+    canvas.drawRect(canvasRect, paint);
+
+    //ベース写真を表示
+    canvas.drawImageRect(this.baseImage,
+        Rect.fromLTWH(srcX, srcY, srcWidth, srcHeight), imageRect, paint);
     this.actualScale = canvasSize.width / srcWidth;
 
     //プリミティブを描画
@@ -170,7 +175,7 @@ class ProblemPainter {
     final prim = this.selectedPrimitive;
     if (prim != null) {
       prim.draw(canvas, canvasCenter, this.baseImagePosition, this.actualScale,
-          true, this.patternIndex);
+          true, this.patternIndex.value);
     }
   }
 }

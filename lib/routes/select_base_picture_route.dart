@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -75,12 +76,12 @@ class _SelectBasePictureState extends State<SelectBasePicture> {
       stream: BasePictureDatastore.getBasePicturesStream(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return LinearProgressIndicator();
-        return _buildListView(context, snapshot.data.documents);
+        return _buildGridView(context, snapshot.data.documents);
       },
     );
   }
 
-  Widget _buildListView(BuildContext context, List<DocumentSnapshot> snapshot) {
+  Widget _buildGridView(BuildContext context, List<DocumentSnapshot> snapshot) {
     return GridView.extent(
       padding: const EdgeInsets.all(4.0),
       maxCrossAxisExtent: 200,
@@ -95,7 +96,6 @@ class _SelectBasePictureState extends State<SelectBasePicture> {
   Widget _buildGridItem(BuildContext context, DocumentSnapshot snapshot) {
     final basePictureDoc = new BasePictureDocument(
         snapshot.documentID, BasePicture.fromMap(snapshot.data));
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -107,168 +107,94 @@ class _SelectBasePictureState extends State<SelectBasePicture> {
           )
         ],
       ),
-      child: _buildListTile2(context, basePictureDoc),
+      child: _buildTile(context, basePictureDoc),
       /*)*/
     );
   }
 
-  Widget _buildListTile2(
-      BuildContext context, BasePictureDocument basePictureDoc) {
+  Widget _buildTile(BuildContext context, BasePictureDocument basePictureDoc) {
+    Widget thumbnailWidget;
+    thumbnailWidget =
+        SizedBox(width: 50.0, height: 50.0, child: CircularProgressIndicator());
+    /*if (basePictureDoc.basePicture.thumbnailURL.length == 0) {
+      if (basePictureDoc.basePicture.createdAt != null) {
+        // ↑ 瞬間nullのパターンが発生するみたい
+        final duration =
+            DateTime.now().difference(basePictureDoc.basePicture.createdAt);
+        if (duration.inMinutes > 2)
+          //2分越えてURLが無いのはエラーしかない
+          thumbnailWidget =
+              Icon(Icons.error, color: Theme.of(context).errorColor);
+      }
+      if (thumbnailWidget == null)
+        //CloudFunctuins処理待ち(エラー表示回避)
+        thumbnailWidget =
+            SizedBox(width: 50, height: 50, child: CircularProgressIndicator());
+    } else {
+      thumbnailWidget = (basePictureDoc.basePicture.thumbnailURL.length == 0)
+          ? SizedBox(
+              width: 50,
+              height: 50,
+              child: CircularProgressIndicator()) //CloudFunctuins処理待ち(エラー表示回避)
+          : CachedNetworkImage(
+              imageUrl: basePictureDoc.basePicture.thumbnailURL,
+              placeholder: (context, url) => SizedBox(
+                  width: 50, height: 50, child: CircularProgressIndicator()),
+              errorWidget: (context, url, error) =>
+                  Icon(Icons.error, color: Theme.of(context).errorColor));
+    }*/
     return GestureDetector(
-      child: Column(
-          //mainAxisSize: MainAxisSize.max,
-          children: <Widget>[
-            /*ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: 100),
-            child:*/
-            /*Container(
-            height: 150,
-            child: ThumbnailDatastore.thumbnailStreamBuilder(
-                context, basePictureDoc.basePicture.picturePath),
-          ),*/
-            //),
-            Expanded(
-                flex: 8,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                  child: ThumbnailDatastore.thumbnailStreamBuilder(
-                      context, basePictureDoc.basePicture.picturePath),
-                )),
-            /*Container(
-              margin: EdgeInsets.all(16.0),
-              child: Text(basePictureDoc.basePicture.name)),*/
-            Expanded(
-              flex: 2,
-              child: Text(basePictureDoc.basePicture.name),
-            )
-          ]),
+      child: Column(children: <Widget>[
+        Expanded(
+            flex: 8,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+              child: thumbnailWidget,
+            )),
+        Expanded(
+          flex: 2,
+          child: Text(basePictureDoc.basePicture.name),
+        )
+      ]),
       onTap: () {
         _handleSelectedBasePicture(basePictureDoc);
       },
     );
   }
 
-  Future<UI.Image> decodeImageFromList(Uint8List list) {
-    final Completer<UI.Image> completer = Completer<UI.Image>();
-    UI.decodeImageFromList(list, completer.complete);
-    return completer.future;
-  }
-
+  //画面右上のポップアップメニューの処理
   void _handlePopupMenuSelected(String value) async {
     switch (value) {
       case _SelectBasePictureAppBarPopupMenuItem.selectFromGallery:
-
         //アルバムから撮影
         final pickedFile = await ImagePicker().getImage(
-          source: ImageSource.gallery,
-          //maxWidth: BasePictureDatastore.BASE_PICTURE_MAX_WIDTH,
-          //maxHeight: BasePictureDatastore.BASE_PICTURE_MAX_HEIGHT
-        );
+            source: ImageSource.gallery,
+            //でかすぎると処理が重くなるので適当に制限
+            maxWidth: 1200,
+            maxHeight: 1200);
         if (pickedFile == null || pickedFile.path == null) return;
-
-        /*Uint8List bytes = pickedFile.readAsBytes() as Uint8List;
-        if (bytes == null) return;
-
-        UI.Image image = await decodeImageFromList(bytes);*/
-
         Navigator.of(context).pushNamed('/edit_problem/edit_holds',
-            arguments: EditHoldsArgs(pickedBasePicture: pickedFile));
+            arguments: EditHoldsArgs(null, pickedFile.path));
         break;
-
       case _SelectBasePictureAppBarPopupMenuItem.selectFromCamera:
-
         //カメラで撮影
         final pickedFile = await ImagePicker().getImage(
-          source: ImageSource.camera,
-          //maxWidth: BasePictureDatastore.BASE_PICTURE_MAX_WIDTH,
-          //maxHeight: BasePictureDatastore.BASE_PICTURE_MAX_HEIGHT
-        );
+            source: ImageSource.camera,
+            //でかすぎると処理が重くなるので適当に制限
+            maxWidth: 1200,
+            maxHeight: 1200);
         if (pickedFile == null || pickedFile.path == null) return;
-
-        /*Uint8List bytes = await pickedFile.readAsBytes();
-        if (bytes == null) return;
-
-        UI.Image image = await decodeImageFromList(bytes);*/
-
         Navigator.of(context).pushNamed('/edit_problem/edit_holds',
-            arguments: EditHoldsArgs(pickedBasePicture: pickedFile));
+            arguments: EditHoldsArgs(null, pickedFile.path));
         break;
     }
   }
 
+  //ベース写真がタップされた
   void _handleSelectedBasePicture(BasePictureDocument basePictureDoc) async {
     //ベース写真をホールド編集に渡す
-
     final url = basePictureDoc.basePicture.pictureURL;
-    /*final bundle = await NetworkAssetBundle(Uri.parse(url)).load(url);
-    if (bundle == null) return;
-
-    Uint8List bytes = bundle.buffer.asUint8List();
-    UI.Image image = await decodeImageFromList(bytes);*/
-
     Navigator.of(context).pushNamed('/edit_problem/edit_holds',
-        arguments: EditHoldsArgs(basePictureURL: url));
+        arguments: EditHoldsArgs(url, null));
   }
-
-  /*
-  void _addNewBasePicture(BuildContext context) async {
-    final items = [
-      MyDialogItem('アルバムから選択', icon: Icon(Icons.image)),
-      MyDialogItem('写真を撮る', icon: Icon(Icons.camera_alt)),
-    ];
-
-    //選択または撮影のいずれかを選択
-    final selectResult = await MyDialog.selectItem(context, setState, items,
-        caption: BasePicture.baseName, label: 'どこから取得しますか？');
-    if (selectResult == null || selectResult.result != MyDialogResult.OK)
-      return;
-
-    //選択または撮影
-    final pickedFile = await ImagePicker().getImage(
-        source: (selectResult.value == 1)
-            ? ImageSource.gallery
-            : ImageSource.camera,
-        maxWidth: BasePictureStorage.MAX_WIDTH,
-        maxHeight: BasePictureStorage.MAX_HEIGHT);
-    if (pickedFile == null || pickedFile.path == null) return;
-
-    //トリミング
-    var croppedFile = await ImageCropper.cropImage(
-        sourcePath: pickedFile.path,
-        androidUiSettings: AndroidUiSettings(
-            toolbarTitle: 'トリミング',
-            toolbarColor: Theme.of(context).primaryColor,
-            toolbarWidgetColor:
-                Theme.of(context).primaryTextTheme.headline6.color,
-            //initAspectRatio: CropAspectRatioPreset.original,
-            lockAspectRatio: false),
-        iosUiSettings: IOSUiSettings(
-          minimumAspectRatio: 1.0,
-        ));
-    if (croppedFile == null || croppedFile.path == null) return;
-
-    //名前の入力
-    final MyDialogTextResult inputResult = await MyDialog.inputText(context,
-        caption: BasePicture.baseName,
-        labelText: BasePictureFieldCaption.name,
-        hintText: 'A壁 など',
-        minTextLength: 1,
-        maxTextLength: 20);
-    if (inputResult == null || inputResult.result != MyDialogResult.OK) return;
-
-    //これ以降はユーザーを待たせないために await しない
-
-    //ベース写真の追加
-    BasePictureDatastore.addBasePicture(
-            inputResult.text, Globals.firebaseUser.uid, croppedFile)
-        .then((String documentID) {
-      //成功
-      MyDialog.successfulSnackBar(_scaffoldKey, '追加しました');
-    }).catchError((err) {
-      //失敗
-      MyDialog.errorSnackBar(_scaffoldKey, '追加できませんでした\n' + err.toString());
-    });
-  }
-*/
 }

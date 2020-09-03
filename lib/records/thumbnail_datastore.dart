@@ -40,6 +40,7 @@ class ThumbnailDatastore {
 
   //サムネイル画像ウイジェットを返す
   //サムネイルはベース写真登録後に遅れて生成されるので、FutureBuilderではうまくいかない
+/*
   static Widget thumbnailStreamBuilder(
       BuildContext context, String picturePath) {
     final docID = picturePath.replaceAll('\\', ':').replaceAll('/', ':');
@@ -58,5 +59,5 @@ class ThumbnailDatastore {
         );
       },
     );
-  }
+  }*/
 }

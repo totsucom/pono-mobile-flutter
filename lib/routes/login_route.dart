@@ -13,9 +13,10 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
-  var _googleSignInErrorMessage = '';
-
-  _LoginState() : super();
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,69 +30,45 @@ class _LoginState extends State<Login> {
           title: const Text('はじめてのログイン'),
         ),
         body: SingleChildScrollView(
-            child: ConstrainedBox(
-                constraints: BoxConstraints(),
-                child: Container(
-                    padding: EdgeInsets.all(32.0),
-                    child: new Column(children: <Widget>[
-                      Container(
-                        padding: EdgeInsets.all(8.0),
-                        child: Text('PONO課題へのログインには、お使いのAndroidのgooge' +
-                            'アカウントが使用されます。\n初めて使用される場合は' +
-                            '下記ボタンをタップしてください。'),
-                      ),
-                      Container(
-                        padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-                        child: RaisedButton(
-                            child: Text('現在使用中のgoogleアカウントを使用'),
-                            onPressed: () {
-                              googleNewSignIn();
-                            }),
-                      ),
-                      Container(
-                        padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
-                        child: Text(_googleSignInErrorMessage,
-                            style: TextStyle(
-                              color: Colors.red,
-                            )),
-                      ),
-                      Container(
-                        padding: EdgeInsets.all(8.0),
-                        child: Text('PONO課題の現在のアカウントやこれまで作成した課題' +
-                            'がある場合、これらを引き継いで、両方のデバイスから' +
-                            'ログインできるようになります。\n' +
-                            '下記から該当するボタンをタップしてください。'),
-                      ),
-                      Container(
-                        padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
-                        child: RaisedButton(
-                            child: Text('AppleIDを入力して引き継ぐ'),
-                            onPressed: () {
-                              //tryLogin();
-                            }),
-                      ),
-                      Container(
-                        padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
-                        child: RaisedButton(
-                            child: Text('別のgoogleアカウントを入力して引き継ぐ'),
-                            onPressed: () {
-                              //tryLogin();
-                            }),
-                      ),
-                    ])))));
+            child: Center(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: <Widget>[
+              Flexible(
+                // padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: RaisedButton(
+                    child: Text('Googleアカウントでログイン'),
+                    onPressed: () {
+                      //ログイン方法をgoogleにする
+                      Globals.loginMethod = LoginMethod.Google;
+                      _trySignIn();
+                    }),
+              ),
+              Flexible(
+                //padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: RaisedButton(
+                    child: Text('AppleIDでログイン'),
+                    onPressed: () {
+                      //ログイン方法をappleにする
+                      //Globals.loginMethod = LoginMethod.Apple;
+                      //Navigator.of(context).pop();
+                    }),
+              ),
+            ]))));
   }
 
-  @override
-  void initState() {
-    super.initState();
+  void _trySignIn() async {
+    await SignIn.regularSignIn();
+    Navigator.of(context).pop();
   }
 
+/*
   void googleNewSignIn() async {
     final result = await SignIn.handleGoogleSignIn();
     final FirebaseUser user = result['user'];
     if (user != null) {
       //ログインに成功した場合、呼び出し元のHome画面にユーザーを返す
-      Globals.setLoginMethod(LoginMethod.Google);
+      Globals.loginMethod = LoginMethod.Google;
       Navigator.of(context).pop(user);
     } else if (result.containsKey('exception')) {
       setState(() {
@@ -104,4 +81,5 @@ class _LoginState extends State<Login> {
       });
     }
   }
+ */
 }

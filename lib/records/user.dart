@@ -7,19 +7,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class User {
   String displayName;
   String iconURL;
+  bool administrator;
   DateTime createdAt;
 
   // コンストラクタ
-  User(String displayName, String iconURL) {
-    this.displayName = displayName;
-    this.iconURL = iconURL;
-  }
+  User(this.displayName, this.iconURL, this.administrator);
 
   // コンストラクタ
   // FirestoreのMapからインスタンス化
   User.fromMap(Map<String, dynamic> map) {
-    this.displayName = map[UserField.displayName];
-    this.iconURL = map[UserField.iconURL];
+    this.displayName = map[UserField.displayName] ?? '';
+    this.iconURL = map[UserField.iconURL] ?? '';
+    this.administrator = (map[UserField.administrator] ?? 0) == 1;
 
     // DartのDateに変換
     final originCreatedAt = map[UserField.createdAt];
@@ -33,6 +32,7 @@ class User {
     return {
       UserField.displayName: this.displayName,
       UserField.iconURL: this.iconURL,
+      UserField.administrator: this.administrator,
       UserField.createdAt: this.createdAt, // Dateはそのまま渡せる
     };
   }
@@ -42,12 +42,14 @@ class User {
 class UserField {
   static const displayName = "displayName";
   static const iconURL = "iconURL";
+  static const administrator = "administrator";
   static const createdAt = "createdAt";
 }
 
 class UserFieldCaption {
   static const displayName = "名前";
   static const iconURL = "アイコン";
+  static const administrator = "管理者";
   static const createdAt = "登録日";
 }
 

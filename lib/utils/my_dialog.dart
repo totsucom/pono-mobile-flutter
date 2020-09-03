@@ -245,13 +245,16 @@ class MyDialog {
    * MyDialog.successfulSnackBar(_scaffoldKey, '削除しました');
    */
 
-  static successfulSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text) {
+  static successfulSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
+      {int displaySeconds = 10}) {
     scaffoldKey.currentState.showSnackBar(SnackBar(
       content: Row(children: <Widget>[
-        Icon(Icons.check, color: Colors.greenAccent),
-        Text(text)
+        Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: Icon(Icons.check, color: Colors.greenAccent)),
+        Expanded(child: Text(text))
       ]),
-      duration: const Duration(seconds: 10),
+      duration: Duration(seconds: displaySeconds),
       action: SnackBarAction(
         label: 'OK',
         onPressed: () {},
@@ -259,14 +262,16 @@ class MyDialog {
     ));
   }
 
-  static informationSnackBar(
-      GlobalKey<ScaffoldState> scaffoldKey, String text) {
+  static informationSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
+      {int displaySeconds = 10}) {
     scaffoldKey.currentState.showSnackBar(SnackBar(
       content: Row(children: <Widget>[
-        Icon(Icons.info_outline, color: Colors.blueAccent),
-        Text(text)
+        Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: Icon(Icons.info_outline, color: Colors.blueAccent)),
+        Expanded(child: Text(text))
       ]),
-      duration: const Duration(seconds: 10),
+      duration: Duration(seconds: displaySeconds),
       action: SnackBarAction(
         label: 'OK',
         onPressed: () {},
@@ -274,13 +279,16 @@ class MyDialog {
     ));
   }
 
-  static hintSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text) {
+  static hintSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
+      {int displaySeconds = 10}) {
     scaffoldKey.currentState.showSnackBar(SnackBar(
       content: Row(children: <Widget>[
-        Icon(Icons.lightbulb_outline, color: Colors.yellow),
-        Text(text)
+        Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: Icon(Icons.lightbulb_outline, color: Colors.yellow)),
+        Expanded(child: Text(text))
       ]),
-      duration: const Duration(seconds: 10),
+      duration: Duration(seconds: displaySeconds),
       action: SnackBarAction(
         label: 'OK',
         onPressed: () {},
@@ -288,16 +296,19 @@ class MyDialog {
     ));
   }
 
-  static errorSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text) {
+  static errorSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
+      {int displaySeconds = 10}) {
     scaffoldKey.currentState.showSnackBar(SnackBar(
       content: Row(children: <Widget>[
-        Icon(
-          Icons.error,
-          color: Colors.redAccent,
-        ),
-        Text(text)
+        Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+            child: Icon(
+              Icons.error,
+              color: Colors.redAccent,
+            )),
+        Expanded(child: Text(text))
       ]),
-      duration: const Duration(seconds: 10),
+      duration: Duration(seconds: displaySeconds),
       action: SnackBarAction(
         label: 'OK',
         onPressed: () {},

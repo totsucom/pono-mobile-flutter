@@ -16,10 +16,11 @@ GlobalKey _toolBarGlobalKey = GlobalKey();
 
 //このrouteにpushする場合に渡すパラメータ
 class TrimmingImageArgs {
-  final title;
-  final double initTrimLeft, initTrimTop, initTrimRight, initTrimBottom;
   final String imageURL;
   final String filePath;
+  final String title;
+  final double initTrimLeft, initTrimTop, initTrimRight, initTrimBottom;
+  final bool enableRotation;
   List<UI.Image> _cachedImage; //描画毎に無限ダウンロードしてしまうので、キャッシュは必須
 
   //コンストラクタにはimageURLまたはfilePathの、いずれかのパラメータを渡す
@@ -29,7 +30,8 @@ class TrimmingImageArgs {
       this.initTrimLeft = 0.0,
       this.initTrimTop = 0.0,
       this.initTrimRight = 0.0,
-      this.initTrimBottom = 0.0}) {
+      this.initTrimBottom = 0.0,
+      this.enableRotation = true}) {
     if (imageURL == null && filePath == null) {
       throw Exception('TrimmingImageArgsにイメージを渡す必要があります');
     }
@@ -116,10 +118,14 @@ class TrimmingImageArgs {
 
 //このrouteがpopする場合に戻すパラメータ
 class TrimmingResult {
+  //TrimmingImageArgsで渡されたパラメータ
   final String imageURL;
   final String filePath;
+
+  //処理結果
   final int rotation;
   final double trimLeft, trimTop, trimRight, trimBottom;
+
   TrimmingResult(this.imageURL, this.filePath, this.rotation, this.trimLeft,
       this.trimTop, this.trimRight, this.trimBottom);
 }
@@ -149,7 +155,7 @@ class _TrimmingImageState extends State<TrimmingImage> {
 
   //buildが完了したときに呼び出される
   void afterBuild(context) async {
-    MyDialog.hintSnackBar(_scaffoldKey, '画像の高さ≒壁の高さが適当です');
+    MyDialog.hintSnackBar(_scaffoldKey, '画像の高さは壁の高さ程度が適当です');
   }
 
   @override
@@ -198,7 +204,7 @@ class _TrimmingImageState extends State<TrimmingImage> {
                   return MyWidget.error(context, future.error.toString());
 
                 if (_paintArgs.images == null) {
-                  //ダウンロードしたイメージを登録
+                  //ダウンロードしたイメージを描画クラスに渡す
                   _paintArgs.images = future.data;
                 }
 
@@ -249,8 +255,10 @@ class _TrimmingImageState extends State<TrimmingImage> {
                       alignment: Alignment.topCenter,
                       child: Container(
                           padding: const EdgeInsets.only(top: 0, bottom: 0),
-                          constraints:
-                              BoxConstraints.tightFor(height: 80.0), //ツールバーの高さ
+                          constraints: BoxConstraints.tightFor(
+                              height: (_arguments.enableRotation)
+                                  ? 80.0
+                                  : 0.0), //ツールバーの高さ
                           child: Row(
                             key: _toolBarGlobalKey,
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,

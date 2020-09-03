@@ -33,7 +33,7 @@ dependencies:
   #画像トリミングする機能を提供（削除予定）
   image_cropper: ^1.3.0
 
-  #キャンバス関連でベース画像の縮小時に使用
+  #キャンバス関連でベース画像のOrientation処理や縮小に使用
   image: ^2.1.14
 
   #ユニークＩＤを生成
@@ -47,6 +47,9 @@ dependencies:
 
   #キャッシュ画像を使う。Image.networkの上位版 ?
   cached_network_image: ^2.2.0+1
+
+  #全体通知？ テーマ変更で使用
+  provider: ^4.3.2+1
 
   #以下、Firebaseのために追加
   #ウェブのpub.devでパッケージを検索して現在のバージョンを知ることができる

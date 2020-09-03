@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -20,16 +21,15 @@ GlobalKey _sliderGlobalKey = GlobalKey();
 
 //このrouteにpushする場合に渡すパラメータ
 class EditHoldsArgs {
-  String _basePictureURL;
-  PickedFile _pickedBasePicture;
+  String imageURL; //ベース写真のソース(URLの場合)
+  String filePath; //ベース写真のソース(ローカルパスの場合)
   UI.Image _cachedImage; //描画毎に無限ダウンロードしてしまうので、キャッシュは必須
 
   //コンストラクタにはいずれかのパラメータを渡す
-  EditHoldsArgs({basePictureURL, pickedBasePicture}) {
-    this._basePictureURL = basePictureURL;
-    this._pickedBasePicture = pickedBasePicture;
-    if (basePictureURL == null && pickedBasePicture == null) {
-      throw Exception('edit_holds_routeにベース写真を渡す必要があります');
+  //使用しない方はnullを設定
+  EditHoldsArgs(this.imageURL, this.filePath) {
+    if (imageURL == null && filePath == null) {
+      throw Exception('EditHoldsArgsにベース写真を渡す必要があります');
     }
   }
 
@@ -39,10 +39,10 @@ class EditHoldsArgs {
     if (_cachedImage != null) {
       completer.complete(_cachedImage);
     } else {
-      if (_basePictureURL != null) {
+      if (imageURL != null) {
         try {
-          final bundle = await NetworkAssetBundle(Uri.parse(_basePictureURL))
-              .load(_basePictureURL);
+          final bundle =
+              await NetworkAssetBundle(Uri.parse(imageURL)).load(imageURL);
           Uint8List bytes = bundle.buffer.asUint8List();
           _cachedImage = await decodeImageFromList(bytes);
           debugPrint("basePictureをダウンロードしました");
@@ -50,9 +50,9 @@ class EditHoldsArgs {
         } catch (e) {
           completer.completeError(e);
         }
-      } else if (_pickedBasePicture != null) {
+      } else if (filePath != null) {
         try {
-          Uint8List bytes = await _pickedBasePicture.readAsBytes();
+          Uint8List bytes = await File(filePath).readAsBytes();
           _cachedImage = await decodeImageFromList(bytes);
           debugPrint("basePictureを読み込みました");
           completer.complete(_cachedImage);
@@ -74,7 +74,8 @@ class EditHolds extends StatefulWidget {
   _EditHoldsState createState() => _EditHoldsState();
 }
 
-class _EditHoldsState extends State<EditHolds> {
+class _EditHoldsState extends State<EditHolds>
+    with SingleTickerProviderStateMixin {
   //前画面から渡されたパラメータを保持
   EditHoldsArgs _arguments;
 
@@ -92,14 +93,26 @@ class _EditHoldsState extends State<EditHolds> {
   //MyPainterクラスに渡す、描画パラメータを保持
   final _paintArgs = ProblemPainter();
 
-  Timer _intervalTimer;
+  //Animation<int> _patternIndex;
+  AnimationController _animationController;
+  //Timer _intervalTimer;
 
   @override
   void initState() {
+    _animationController = AnimationController(
+        duration: const Duration(milliseconds: 500), vsync: this);
+    if (_paintArgs != null)
+      _paintArgs.patternIndex =
+          Tween(begin: 0, end: 3).animate(_animationController)
+            ..addListener(() {
+              setState(() {});
+            });
+
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => afterBuild(context));
+    //WidgetsBinding.instance.addPostFrameCallback((_) => afterBuild(context));
   }
 
+  /*
   //buildが完了したときに呼び出される
   void afterBuild(context) {
     //インターバルタイマーを開始する
@@ -113,12 +126,14 @@ class _EditHoldsState extends State<EditHolds> {
         });
       },
     );
-  }
+  }*/
 
   @override
   void dispose() {
-    //インターバルタイマーを終了させる
+    _animationController.dispose();
+    /*//インターバルタイマーを終了させる
     if (_intervalTimer != null) _intervalTimer.cancel();
+     */
     super.dispose();
   }
 
@@ -162,7 +177,7 @@ class _EditHoldsState extends State<EditHolds> {
                   return MyWidget.error(context, future.error.toString());
 
                 if (_paintArgs.baseImage == null) {
-                  //ベース写真を登録
+                  //ベース写真を描画クラスに渡す
                   _paintArgs.baseImage = future.data;
                 }
 
@@ -344,6 +359,13 @@ class _EditHoldsState extends State<EditHolds> {
         _sizeMenuSelectedValue = prim.sizeType;
         _colorMenuSelectedValue = prim.color;
       });
+    }
+
+    //アニメーションの起動と停止
+    if (_paintArgs.selectedPrimitiveIndex >= 0) {
+      if (!_animationController.isAnimating) _animationController.repeat();
+    } else {
+      if (_animationController.isAnimating) _animationController.reset();
     }
   }
 
