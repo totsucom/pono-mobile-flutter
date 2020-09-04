@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pono_problem_app/routes/base_picture_view_route.dart';
+import 'package:pono_problem_app/routes/edit_account.dart';
 import 'package:pono_problem_app/routes/edit_holds_route.dart';
 import 'package:pono_problem_app/routes/manage_base_picture_route.dart';
 import 'package:pono_problem_app/routes/select_base_picture_route.dart';
@@ -46,8 +47,9 @@ class MyApp extends StatelessWidget {
               //initialRoute: '/login',
               initialRoute: '/',
               routes: {
-                '/login': (_) => Login(),
+                //'/login': (_) => Login(),
                 '/': (_) => Home(),
+                '/edit_account': (_) => EditAccount(),
                 '/edit_problem/select_base_picture': (_) => SelectBasePicture(),
                 '/edit_problem/edit_holds': (_) => EditHolds(),
                 '/edit_problem/trimming_image': (_) => TrimmingImage(),
