@@ -6,6 +6,18 @@ import 'package:flutter/material.dart';
 //クラスの作成に参考にしたページ
 //https://qiita.com/sekitaka_1214/items/129f41c2fbb1dc05b5c3
 
+/*
+ * users コレクション内の UserドキュメントのIDは登録時に Firebaseuser.uid を
+ * 使用せず、Firestore による自動生成を行う。
+ *
+ * Firebaseuser.uid と Usetドキュメントとの関連付けは、別途 userReferences
+ * コレクションによって定義される。
+ *
+ * userReferences コレクション内の UserRefドキュメントのIDは Firebaseuser.uid
+ * が割り当てられ、ref フィールドが該当する Userドキュメントを示す。
+ * これにより、１つの Userドキュメントに複数の Firebase.uid が関連付けられるようになる。
+ */
+
 //usersコレクションのドキュメント
 class User {
   static String baseName = 'ユーザー';
@@ -19,6 +31,12 @@ class User {
   User(String displayName, String iconURL, this.administrator) {
     this.displayName = displayName ?? '';
     this.iconURL = iconURL ?? '';
+  }
+
+  User.fromFirebaseUser(FirebaseUser fbUser) {
+    this.displayName = fbUser.displayName;
+    this.iconURL = fbUser.photoUrl ?? '';
+    this.administrator = false;
   }
 
   User clone() {
@@ -43,26 +61,14 @@ class User {
 
   // Firestore用のMapに変換
   Map<String, dynamic> toMap() {
+    debugPrint('User.toMap() が実行されたE');
+
     return {
       UserField.displayName: this.displayName,
       UserField.iconURL: this.iconURL,
       UserField.administrator: this.administrator,
       UserField.createdAt: this.createdAt, // Dateはそのまま渡せる
     };
-  }
-
-  Widget getCircleAvatar() {
-    if (this.iconURL == null || this.iconURL.length == 0) {
-      return CircleAvatar(
-        backgroundImage: AssetImage('images/user_image_64.png'),
-        backgroundColor: Colors.black12,
-      );
-    } else {
-      return CircleAvatar(
-        backgroundImage: NetworkImage(this.iconURL),
-        backgroundColor: Colors.transparent,
-      );
-    }
   }
 }
 
@@ -83,17 +89,13 @@ class UserFieldCaption {
 
 //userIDとフィールドデータを保持する
 class UserDocument {
-  String documentId; // = userID
-  User user;
+  String docId; // = userID
+  User data;
 
-  UserDocument(this.documentId, this.user);
+  UserDocument(this.docId, this.data);
 
-  UserDocument clone() {
-    return UserDocument(this.documentId, this.user.clone());
-  }
+  //UserDocument clone() {
+  //  return UserDocument(this.docId, this.data.clone());
+  //}
 
-  UserDocument.fromFirebaseUser(FirebaseUser user) {
-    this.documentId = user.uid;
-    this.user = User(user.displayName, user.photoUrl, false);
-  }
 }

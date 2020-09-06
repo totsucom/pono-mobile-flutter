@@ -6,6 +6,7 @@ import 'package:pono_problem_app/records/base_picture_datastore.dart';
 import 'package:pono_problem_app/records/user_datastore.dart';
 import 'package:pono_problem_app/utils/formatter.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
+import 'package:pono_problem_app/utils/my_widget.dart';
 
 //このrouteにpushする場合に渡すパラメータ
 class BasePictureViewArgs {
@@ -145,7 +146,7 @@ class _BasePictureViewState extends State<BasePictureView> {
             flex: 6,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-              child: UserDatastore.displayNameFutureBuilder(
+              child: MyWidget.displayNameFutureBuilder(
                   basePictureDoc.basePicture.userID),
             )),
       ]),

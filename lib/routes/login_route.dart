@@ -1,3 +1,4 @@
+/*
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -72,7 +73,7 @@ class _LoginState extends State<Login> {
       icon = Icon(Icons.person, size: 12);
     } else {
       icon = CircleAvatar(
-        backgroundImage: NetworkImage(Globals.ponoUser.user.iconURL),
+        backgroundImage: NetworkImage(Globals.ponoUser.data.iconURL),
         backgroundColor: Colors.transparent, // 背景色
         radius: 12, // 表示したいサイズの半径を指定
       );
@@ -142,7 +143,7 @@ class _LoginState extends State<Login> {
     if (login) {
       try {
         if (Globals.ponoUser != null &&
-            Globals.ponoUser.documentId != Globals.firebaseUser.uid) {
+            Globals.ponoUser.docId != Globals.firebaseUser.uid) {
           //FirebaseユーザーとPONOユーザーが合致しない場合は、PONOユーザーをクリアする
           Globals.ponoUser = null;
         }
@@ -166,8 +167,8 @@ class _LoginState extends State<Login> {
 
         //この後アカウント編集に移るので、UIに値を渡しておく
         if (Globals.ponoUser != null) {
-          _displayNameTextEdit.text = Globals.ponoUser.user.displayName;
-          _iconUrl = Globals.ponoUser.user.iconURL;
+          _displayNameTextEdit.text = Globals.ponoUser.data.displayName;
+          _iconUrl = Globals.ponoUser.data.iconURL;
         }
       } catch (e) {
         completer.completeError('ログイン中の例外: ' + e.toString());
@@ -177,3 +178,4 @@ class _LoginState extends State<Login> {
     return completer.future;
   }
 }
+*/

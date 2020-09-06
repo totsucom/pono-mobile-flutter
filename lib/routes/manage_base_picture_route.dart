@@ -179,7 +179,7 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
       /*ThumbnailDatastore.thumbnailStreamBuilder(
           context, basePictureDoc.basePicture.picturePath),*/
       title: Text(basePictureDoc.basePicture.name),
-      subtitle: UserDatastore.displayNameFutureBuilder(
+      subtitle: MyWidget.displayNameFutureBuilder(
           basePictureDoc.basePicture.userID,
           Text(dateString),
           '${dateString}\nby{displayName}'),

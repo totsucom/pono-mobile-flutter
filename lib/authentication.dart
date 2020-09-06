@@ -60,4 +60,52 @@ class Authentication {
       return completer.future;
     }
   }
+
+  static Future<FirebaseUser> google(FirebaseAuth auth) async {
+    var completer = new Completer<FirebaseUser>();
+
+    debugPrint('handleGoogleAuth() 認証開始');
+
+    final googleSignIn = new GoogleSignIn();
+
+    GoogleSignInAccount googleCurrentUser = googleSignIn.currentUser;
+    try {
+      if (googleCurrentUser == null) {
+        googleCurrentUser = await googleSignIn.signInSilently();
+        //debugPrint("サイレントログイン " + ((googleCurrentUser == null) ? '失敗' : '成功'));
+      }
+      if (googleCurrentUser == null) {
+        googleCurrentUser = await googleSignIn.signIn();
+        //debugPrint("ログイン " + ((googleCurrentUser == null) ? '失敗' : '成功'));
+      }
+      if (googleCurrentUser == null) {
+        //debugPrint('googleにログインできませんでした');
+        completer.completeError('handleGoogleAuth() 認証失敗1');
+        return completer.future;
+      }
+
+      //googleユーザーからアクセストークンを取得し、Firebaseユーザーを取得
+      GoogleSignInAuthentication googleAuth =
+          await googleCurrentUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.getCredential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      final authResult =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+      final user = authResult.user;
+
+      if (user == null) {
+        completer.completeError('handleGoogleAuth() 認証失敗2');
+        return completer.future;
+      }
+
+      completer.complete(user);
+      return completer.future;
+    } catch (e) {
+      debugPrint("handleGoogleAuth()で例外 " + e.toString());
+      completer.completeError(e.toString());
+      return completer.future;
+    }
+  }
 }

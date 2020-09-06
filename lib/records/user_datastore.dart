@@ -1,10 +1,9 @@
 import 'package:flutter/cupertino.dart';
-
 import './user.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
-//usersコレクションを扱うツール
+// usersコレクションを扱うツール
 class UserDatastore {
   static String getCollectionPath() {
     return "users";
@@ -14,71 +13,75 @@ class UserDatastore {
     return "users/$documentId";
   }
 
-  /* documentIDを自動生成する場合
-  static String addUser(User user) {
-    final newDocument =
-    Firestore.instance.collection(getCollectionPath()).document();
-    newDocument.setData(user.toMap());
-    return newDocument.documentID;
-  }*/
+  // userを追加する
+  // userが存在する場合は上書きしてしまうので、注意すること
+  // 履歴 2020/9/5 ドキュメントIDを自動生成に変更。Firebaseuser.uidとUserの関連付け
+  // はUserReferenceを用いる
+  static Future<UserDocument> addUser(/*String userID,*/ User user) async {
+    debugPrint('UserDatastore.addUser() が実行されたぞ');
 
-  //userを追加する
-  //userが存在する場合は上書きしてしまうので、注意すること
-  static Future<UserDocument> addUser(String userID, User user) async {
     var completer = new Completer<UserDocument>();
     try {
-      Firestore.instance.runTransaction((Transaction tr) async {
-        QuerySnapshot query = await Firestore.instance
-            .collection(getCollectionPath())
-            .where(UserField.displayName, isEqualTo: user.displayName)
-            .getDocuments();
+      //同じdisplayNameを探すクエリ
+      final query = await Firestore.instance
+          .collection(getCollectionPath())
+          .where(UserField.displayName, isEqualTo: user.displayName)
+          .getDocuments();
 
-        if (query.documents.length == 0 ||
-            (query.documents[0].documentID == userID)) {
+      //トランザクションを開始
+      Firestore.instance.runTransaction((Transaction tr) async {
+        if (query.documents.length == 0) {
+          //displayNameが重複してなかった
+
+          //新しいUserを書き込み
           final doc = Firestore.instance
               .collection(getCollectionPath())
-              .document(userID);
-
-          //同じdisplayNameの無いときだけ書き込みを行う
+              .document(); //userID);
           final Map map = user.toMap();
           map[UserField.createdAt] = FieldValue.serverTimestamp();
           tr.set(doc, map);
 
-          completer.complete(UserDocument(userID, User.fromMap(map)));
+          //完了
+          completer.complete(UserDocument(doc.documentID, User.fromMap(map)));
         } else {
-          completer.complete(null);
+          //失敗
+          completer.completeError('表示名が重複しています');
         }
       });
     } catch (e) {
+      //失敗（例外）
       debugPrint('UserDatastore.addUser()で例外 ' + e.toString());
       completer.completeError(e.toString());
     }
     return completer.future;
   }
 
-  //userを更新する
-  static Future<UserDocument> updateUser(String userID, User user) async {
+  // userを更新する
+  static Future<UserDocument> updateUser(UserDocument userDoc) async {
     var completer = new Completer<UserDocument>();
     try {
+      //トランザクションを開始
       Firestore.instance.runTransaction((Transaction tr) async {
+        //displayNameの重複チェック
         QuerySnapshot query = await Firestore.instance
             .collection(getCollectionPath())
-            .where(UserField.displayName, isEqualTo: user.displayName)
+            .where(UserField.displayName, isEqualTo: userDoc.data.displayName)
             .getDocuments();
 
         if (query.documents.length == 0 ||
-            (query.documents[0].documentID == userID)) {
+            (query.documents[0].documentID == userDoc.docId)) {
+          //重複してなかったので書き込み
           final doc = Firestore.instance
               .collection(getCollectionPath())
-              .document(userID);
+              .document(userDoc.docId);
 
           //同じdisplayNameの無いときだけ書き込みを行う
-          final Map map = user.toMap();
+          final Map map = userDoc.data.toMap();
           //作成日は変更しないので削除しておく
           map.remove(UserField.createdAt);
           tr.update(doc, map);
 
-          completer.complete(UserDocument(userID, User.fromMap(map)));
+          completer.complete(UserDocument(userDoc.docId, User.fromMap(map)));
         } else {
           completer.complete(null);
         }
@@ -89,69 +92,7 @@ class UserDatastore {
     }
     return completer.future;
   }
-  /*
-      QuerySnapshot snapshot = await tr
-            .collection(getCollectionPath())
-            .where(UserField.displayName, isEqualTo: displayName)
-            .getDocuments();
 
-      } catch (e) {
-        //例外処理を行っているのは、getUser()の真似
-        debugPrint('UserDatastore.getUserFromDisplayName()で例外 ' + e.toString());
-        return null;
-      }
-      return (snapshot.documents.length == 0)
-          ? null
-          : new UserDocument(snapshot.documents[0].documentID,
-              User.fromMap(snapshot.documents[0].data));
-
-      tran.get(postRef).then((DocumentSnapshot snap) {
-        if (snap.exists)
-          tran.update(postRef,
-              <String, dynamic>{"likesCount": snap.data['likesCount'] + 1});
-      });
-    });
-
-    final Map map = user.toMap();
-    map[UserField.createdAt] = FieldValue.serverTimestamp();
-    Firestore.instance
-        .collection(getCollectionPath())
-        .document(userID)
-        .setData(map);
-  }*/
-
-  /*static bool addUser2(String userID, User user) {
-    final Map map = user.toMap();
-    map[UserField.createdAt] = FieldValue.serverTimestamp();
-    Firestore.instance.collection(getCollectionPath()).document(userID)
-        .setData(map)
-    .then((value) {
-      return true;
-    }).catchError((err) {
-      return false;
-    });
-    //これでは結果を返せない
-  }*/
-  /*static void addUserT(Transaction transaction, String userID, User user) {
-    final Map map = user.toMap();
-    map[UserField.createdAt] = FieldValue.serverTimestamp();
-    transaction.set(
-        Firestore.instance.collection(getCollectionPath()).document(userID),
-        map);
-  }
-*/
-/*
-  //userを更新する
-  static void updateUser(String userID, User user) {
-    var map = user.toMap();
-    //作成日は変更しないので削除しておく
-    map.remove(UserField.createdAt);
-    Firestore.instance
-        .collection(getCollectionPath())
-        .document(userID)
-        .updateData(map);
-  }
-*/
   // userを取得する
   // userIDが存在しない場合はnullを返す
   static Future<UserDocument> getUser(String userID) async {
@@ -192,25 +133,13 @@ class UserDatastore {
             User.fromMap(snapshot.documents[0].data));
   }
 
-  //userIDからdisplayNameを取得するFutureBuilderを生成する。
-  //最初にfirstWidget、ロードが完了したらcompleteTextを表示する。
-  //completeText内に (displayName) 文字列があれば、それはdisplayNameに置換される。
-  static Widget displayNameFutureBuilder(String userID,
-      [Widget firstWidget, String completeText = '{displayName}']) {
-    return FutureBuilder(
-        future: UserDatastore.getUser(userID),
-        builder: (context, future) {
-          if (!future.hasData || future.data == null) {
-            return (firstWidget == null) ? Text('') : firstWidget;
-          }
-          final UserDocument userDoc = future.data;
-          return Text(completeText.replaceAll(
-              '{displayName}', userDoc.user.displayName));
-        });
-  }
-
   //userを削除する
   static void deleteUser(String userID) {
     Firestore.instance.document(getDocumentPath(userID)).delete();
+  }
+
+  // userを取得するストリーム
+  static Stream<DocumentSnapshot> getUserStream(String userID) {
+    return Firestore.instance.document(getDocumentPath(userID)).snapshots();
   }
 }

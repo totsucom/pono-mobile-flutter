@@ -1,40 +1,37 @@
 import 'dart:async';
 import 'dart:io';
-
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:pono_problem_app/records/problem.dart';
 import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user_datastore.dart';
+import 'package:pono_problem_app/records/user_ref.dart';
+import 'package:pono_problem_app/records/user_ref_datastore.dart';
 import 'package:pono_problem_app/routes/trimming_image_route.dart';
 import 'package:pono_problem_app/utils/formatter.dart';
-import 'package:pono_problem_app/utils/menu_item.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/my_widget.dart';
-import 'package:provider/provider.dart';
 import '../globals.dart';
-import '../my_theme.dart';
-import '../authentication.dart';
 
 //このrouteにpushする場合に渡すパラメータ
 class EditAccountArgs {
-  //newAccountの場合はGlobals.firebaseUserから新規ユーザーを仮作成し、
-  //ユーザーの変更後に保存する
   bool newAccount;
-  EditAccountArgs(this.newAccount);
-}
+  String uidOfFirebaseUser;
+  String documentID;
+  User user;
 
-// このrouteがpop()でHome画面に戻る場合、次のルールに従うこと
-// 1. EditAccountArgs.newAccount == true のとき、Home側で必ずリロードするため、
-//   pop()で返す必要は無い。
-// 2. EditAccountArgs.newAccount == false　のとき、
-// 2-1. データを更新した場合は .pop(UserDocument) を返す。
-// 2-2. 更新しなかった場合は何も返さない .pop()
+  EditAccountArgs.forNew(String uidOfFirebaseUser, User user) {
+    newAccount = true;
+    this.uidOfFirebaseUser = uidOfFirebaseUser;
+    this.user = user;
+  }
+
+  EditAccountArgs.forEdit(UserDocument userDoc) {
+    newAccount = false;
+    user = userDoc.data;
+    documentID = userDoc.docId;
+  }
+}
 
 class EditAccount extends StatefulWidget {
   EditAccount({Key key}) : super(key: key);
@@ -45,9 +42,8 @@ class EditAccount extends StatefulWidget {
 
 class _EditAccountState extends State<EditAccount> {
   EditAccountArgs _arguments;
-  String _title;
-  UserDocument _edit;
-  String _originalIconUrl;
+  String _editName;
+  String _editURL;
   bool _nameDuplicated = false;
 
   @override
@@ -61,19 +57,8 @@ class _EditAccountState extends State<EditAccount> {
     if (_arguments == null) {
       //前画面から渡されたパラメータを読み込む
       _arguments = ModalRoute.of(context).settings.arguments;
-      if (_arguments == null) {
-        throw Exception('edit_account_routeにEditAccountArgsクラスを渡してください');
-      } else {
-        _edit = (_arguments.newAccount)
-            ? UserDocument.fromFirebaseUser(Globals.firebaseUser)
-            : Globals.ponoUser.clone();
-        if (_edit == null || _edit.user == null) {
-          throw Exception('編集すべきUserDocumentがnullです');
-        } else {
-          _title = (_arguments.newAccount) ? 'アカウントの作成' : 'アカウントの編集';
-          _originalIconUrl = _edit.user.iconURL;
-        }
-      }
+      _editName = _arguments.user.displayName;
+      _editURL = _arguments.user.iconURL;
     }
 
     return WillPopScope(
@@ -82,8 +67,8 @@ class _EditAccountState extends State<EditAccount> {
         child: Scaffold(
             appBar: new AppBar(
               automaticallyImplyLeading:
-                  (!_arguments.newAccount), //新規の場合backボタンを消す
-              title: Text(_title),
+                  (!_arguments.newAccount), //新規の場合 ← ボタンを消す
+              title: Text((_arguments.newAccount) ? 'アカウントの作成' : 'アカウントの編集'),
               centerTitle: true,
               actions: [
                 FlatButton(
@@ -101,74 +86,44 @@ class _EditAccountState extends State<EditAccount> {
   //appBarの戻るボタン "←" がタップされた
   //新規の場合はここに来ない
   Future<bool> _requestPop() async {
-    if (Globals.ponoUser.user.displayName != _edit.user.displayName ||
-        Globals.ponoUser.user.iconURL != _edit.user.iconURL) {
-      final result = await MyDialog.selectYesNo(context,
-          caption: _title, labelText: '変更した内容が失われてしまいますが、それでも戻りますか？');
-      if (result != MyDialogResult.Yes) {
-        return new Future.value(); //変更なしのため何も返さない
-      }
+    final result = await MyDialog.selectYesNo(context,
+        caption: (_arguments.newAccount) ? 'アカウントの作成' : 'アカウントの編集',
+        labelText: '変更した内容があった場合、それは失われてしまいますが、それでも戻りますか？');
+    if (result != MyDialogResult.Yes) {
+      return new Future.value(false); //戻らない
     }
-    return new Future.value(); //変更なしのため何も返さない
+    return new Future.value(true); //戻る
   }
 
   //appBarのチェックボタン "✔" がタップされた
   void _editCompleted() async {
-    if (_arguments.newAccount) {
-      UserDatastore.addUser(_edit.documentId, _edit.user).then((userDoc) {
-        if (userDoc != null)
-          Navigator.of(context).pop(); // Homeで必ずリロードするので何も返さなくていい
-        else
-          MyDialog.ok(context,
-              icon: Icon(Icons.error, color: Theme.of(context).errorColor),
-              caption: 'アカウントの保存',
-              labelText: '失敗しました。表示名が他の方と重複しているのかもしれません。');
-      }).catchError((err) {
-        MyDialog.ok(context,
-            icon: Icon(
-              Icons.error,
-              color: Theme.of(context).errorColor,
-            ),
-            caption: 'アカウントの保存',
-            labelText: 'エラーが発生しました\n' + err.toString());
-      });
-    } else {
-      UserDatastore.updateUser(_edit.documentId, _edit.user).then((userDoc) {
-        if (userDoc != null)
-          Navigator.of(context).pop(userDoc); // Homeでリビルドが必要
-        else
-          MyDialog.ok(context,
-              icon: Icon(Icons.error, color: Theme.of(context).errorColor),
-              caption: 'アカウントの保存',
-              labelText: '失敗しました。表示名が他の方と重複しているのかもしれません。');
-      }).catchError((err) {
-        MyDialog.ok(context,
-            icon: Icon(
-              Icons.error,
-              color: Theme.of(context).errorColor,
-            ),
-            caption: 'アカウントの保存',
-            labelText: 'エラーが発生しました\n' + err.toString());
-      });
+    // 編集された内容でユーザーを作成
+    User newUser = _arguments.user.clone();
+    newUser.displayName = _editName;
+    newUser.iconURL = _editURL;
+
+    try {
+      if (_arguments.newAccount) {
+        //新規登録
+        UserDocument userDoc = await UserDatastore.addUser(newUser);
+        UserRefDocument refDoc = await UserRefDatastore.addUserRef(
+            _arguments.uidOfFirebaseUser, userDoc.docId);
+      } else {
+        //更新
+        UserDocument userDoc = await UserDatastore.updateUser(
+            UserDocument(_arguments.documentID, newUser));
+      }
+      //前画面に戻る
+      Navigator.of(context).pop();
+    } catch (e) {
+      MyDialog.ok(context,
+          icon: Icon(Icons.error, color: Theme.of(context).errorColor),
+          caption: 'アカウントの保存',
+          labelText: '失敗しました。表示名が他の方と重複しているのかもしれません。');
     }
   }
 
   Widget _buildView(BuildContext context) {
-    //アバターアイコン
-    /*Widget icon;
-    if (_edit.user.iconURL.length == 0) {
-      icon = CircleAvatar(
-        backgroundImage: AssetImage('images/user_image_64.png'),
-        backgroundColor: Colors.black12, // 背景色
-        //Icon(Icons.person_outline, size: 100),
-      );
-    } else {
-      icon = CircleAvatar(
-        backgroundImage: NetworkImage(_edit.user.iconURL),
-        backgroundColor: Colors.transparent, // 背景色
-      );
-    }*/
-
     return Column(children: <Widget>[
       Padding(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
@@ -177,7 +132,7 @@ class _EditAccountState extends State<EditAccount> {
                 height: 100,
                 width: 100,
                 //color: Colors.yellow,
-                child: _edit.user.getCircleAvatar()),
+                child: MyWidget.getCircleAvatar(_editURL)),
             onTap: selectIconSource,
           )),
       Row(children: <Widget>[
@@ -193,7 +148,7 @@ class _EditAccountState extends State<EditAccount> {
             child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                 child: Row(children: <Widget>[
-                  Text(_edit.user.displayName, textAlign: TextAlign.left),
+                  Text(_editName, textAlign: TextAlign.left),
                   IconButton(
                       icon: Icon(Icons.edit),
                       onPressed: () {
@@ -235,7 +190,7 @@ class _EditAccountState extends State<EditAccount> {
               child: Padding(
                   padding:
                       const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                  child: Text(Formatter.toYMD_HM(_edit.user.createdAt),
+                  child: Text(Formatter.toYMD_HM(_arguments.user.createdAt),
                       textAlign: TextAlign.left))),
         ]),
       Row(children: <Widget>[
@@ -244,7 +199,7 @@ class _EditAccountState extends State<EditAccount> {
             flex: 4,
             child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                child: Text('DocumentID',
+                child: Text((_arguments.newAccount) ? 'FB.uid' : 'DocumentID',
                     textAlign: TextAlign.right,
                     style: TextStyle(
                         fontStyle: FontStyle.italic,
@@ -253,7 +208,10 @@ class _EditAccountState extends State<EditAccount> {
             flex: 6,
             child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                child: Text(_edit.documentId,
+                child: Text(
+                    (_arguments.newAccount)
+                        ? _arguments.uidOfFirebaseUser
+                        : _arguments.documentID,
                     textAlign: TextAlign.left,
                     style: TextStyle(
                         fontStyle: FontStyle.italic,
@@ -268,7 +226,7 @@ class _EditAccountState extends State<EditAccount> {
       MyDialogItem('写真を撮る', icon: Icon(Icons.camera_alt)),
       MyDialogItem('削除する', icon: Icon(Icons.delete_outline))
     ];
-    if (_originalIconUrl != _edit.user.iconURL) {
+    if (_editURL != _arguments.user.iconURL) {
       items.add(MyDialogItem('元に戻す', icon: Icon(Icons.undo)));
     }
 
@@ -302,11 +260,11 @@ class _EditAccountState extends State<EditAccount> {
 
     } else if (selectResult.value == 3) {
       setState(() {
-        _edit.user.iconURL = '';
+        _editURL = '';
       });
     } else /* if (selectResult.value ==4) */ {
       setState(() {
-        _edit.user.iconURL = _originalIconUrl;
+        _editURL = _arguments.user.iconURL;
       });
     }
   }
@@ -316,20 +274,20 @@ class _EditAccountState extends State<EditAccount> {
     final MyDialogTextResult inputResult = await MyDialog.inputText(context,
         caption: User.baseName,
         labelText: UserFieldCaption.displayName,
-        initialText: _edit.user.displayName,
+        initialText: _editName,
         minTextLength: 1,
         maxTextLength: 20,
         trimText: true);
 
     if (inputResult != null && inputResult.result == MyDialogResult.OK) {
       //名前の重複チェック
-      var duplicated =
+      var foundUserDoc =
           await UserDatastore.getUserFromDisplayName(inputResult.text);
       _nameDuplicated =
-          (duplicated != null && duplicated.documentId != _edit.documentId);
+          (foundUserDoc != null && foundUserDoc.docId != _arguments.documentID);
 
       setState(() {
-        _edit.user.displayName = inputResult.text; //新しい名前を設定
+        _editName = inputResult.text; //新しい名前を設定
       });
     }
   }

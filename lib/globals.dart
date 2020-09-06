@@ -31,6 +31,10 @@ class Globals {
         e.toString() ==
         (_prefs.getString("AuthMethod") ?? AuthMethod.None.toString()));
     darkTheme = _prefs.getBool("DarkTheme") ?? false;
+
+    //TODO デバッグ
+    authMethod = AuthMethod.None;
+
     return true;
   }
 

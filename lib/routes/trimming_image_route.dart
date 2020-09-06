@@ -280,10 +280,10 @@ class _TrimmingImageState extends State<TrimmingImage> {
           caption: _arguments.title,
           labelText: '変更したトリミング結果が失われてしまいますが、それでも戻りますか？');
       if (result != MyDialogResult.Yes) {
-        return new Future.value(false);
+        return new Future.value(false); //戻らない
       }
     }
-    return new Future.value(true);
+    return new Future.value(true); //戻る
   }
 
   //appBarのチェックボタン "✔" がタップされた

@@ -9,6 +9,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:pono_problem_app/records/problem.dart';
 import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user_datastore.dart';
+import 'package:pono_problem_app/records/user_ref.dart';
+import 'package:pono_problem_app/records/user_ref_datastore.dart';
 import 'package:pono_problem_app/routes/edit_account.dart';
 import 'package:pono_problem_app/utils/menu_item.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
@@ -17,6 +19,7 @@ import 'package:provider/provider.dart';
 import '../globals.dart';
 import '../my_theme.dart';
 import '../authentication.dart';
+import 'dart:math' as Math;
 
 class _HomeAppBarPopupMenuItem {
   static const manageBasePicture = '壁写真の管理';
@@ -33,7 +36,11 @@ class _HomeState extends State<Home> {
   //認証、ログインを管理するストリーム
   final _authSignInStream = StreamController<_AuthSignInResult>();
 
+  final _auth = FirebaseAuth.instance;
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  bool _authorizing = false;
 
   //appBarのポップアップメニュー
   List<MenuItem<String>> _appBarPopupMenuItems = [
@@ -48,16 +55,45 @@ class _HomeState extends State<Home> {
     _authSignInStream.close();
   }
 
+  Future<FirebaseUser> _authenticationFuture;
+
   @override
   void initState() {
     super.initState();
+/*
+    Future.delayed(Duration.zero).then((_) async {
+      Globals.loadSettings().then((_) async {
+        debugPrint('設定を読み込みました');
 
-    //最初のログイン処理を開始、結果をStreamBuilderに渡してる
-    _initAndQuickSignIn().then((_AuthSignInResult result) {
-      _authSignInStream.sink.add(result);
-    }).catchError((err) {
-      _authSignInStream.sink.addError(err.toString());
+        if (Globals.authMethod == AuthMethod.None) {
+          debugPrint('認証方法が設定されていません');
+
+          final items = [
+            MyDialogItem('Google', icon: Icon(Icons.gamepad)),
+          ];
+          MyDialogIntResult res;
+          while (true) {
+            res = await MyDialog.selectItem(context, setState, items,
+                caption: '認証方法の選択', label: 'へいへい');
+            if (res.result == MyDialogResult.OK) break;
+          }
+          switch (res.value) {
+            case 1:
+              debugPrint('Google認証が選択されました');
+              Globals.authMethod = AuthMethod.Google;
+              Globals.saveSettings();
+          }
+        }
+        switch (Globals.authMethod) {
+          case AuthMethod.Google:
+            debugPrint('Google認証を開始します');
+            _authenticationFuture = Authentication.google(_auth);
+            break;
+        }
+      });
     });
+
+ */
 
     WidgetsBinding.instance.addPostFrameCallback((_) => afterBuild(context));
   }
@@ -72,6 +108,139 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     debugPrint("home_routeのbuild()");
 
+    return StreamBuilder(
+        stream: _auth.onAuthStateChanged,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            //認証中
+            return Scaffold(body: MyWidget.loading(context, '認証中...。'));
+          } else if (!snapshot.hasData) {
+            //認証できなかったので認証候補を選択
+            return Scaffold(body: Text('認証画面を表示'));
+          } else {
+            FirebaseUser fbUser = snapshot.data;
+            debugPrint(
+                '認証された FirebaseUser = ${fbUser.uid} ${fbUser.displayName}');
+
+            return StreamBuilder(
+                stream: UserRefDatastore.getUserRefStream(fbUser.uid),
+                builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
+                  debugPrint(
+                      'snapshot.hasData = ' + snapshot.hasData.toString());
+                  debugPrint(
+                      'snapshot.hasError = ' + snapshot.hasError.toString());
+
+                  if (!snapshot.hasData) {
+                    return Scaffold(
+                        body: MyWidget.loading(context, 'ユーザー参照を取得中...。'));
+                  } else {
+                    if (snapshot.data.data == null) {
+                      return Scaffold(
+                          body: Column(children: <Widget>[
+                        Text('ユーザーなし（参照無し）'),
+                        RaisedButton(
+                          child: Text('ユーザー追加'),
+                          onPressed: () {
+                            _addUser(fbUser);
+                          },
+                        )
+                      ]));
+                    } else {
+                      UserRef userRef = UserRef.fromMap(snapshot.data.data);
+                      return StreamBuilder(
+                          stream: UserDatastore.getUserStream(userRef.userID),
+                          builder: (context,
+                              AsyncSnapshot<DocumentSnapshot> snapshot) {
+                            if (!snapshot.hasData) {
+                              return Scaffold(
+                                  body: MyWidget.loading(
+                                      context, 'ユーザーを取得中...。'));
+                            } else {
+                              if (snapshot.data.data == null) {
+                                return Scaffold(
+                                    body: Column(children: <Widget>[
+                                  Text('ユーザーなし（実体無し）'),
+                                  RaisedButton(
+                                    child: Text('ユーザー追加'),
+                                    onPressed: () {
+                                      _addUser(fbUser);
+                                    },
+                                  )
+                                ]));
+                              } else {
+                                User user = User.fromMap(snapshot.data.data);
+                                return Scaffold(
+                                    body: Text('ユーザー ' + user.displayName));
+                              }
+                            }
+                          });
+                    }
+                  }
+                });
+          }
+/*
+            if (_authorizing == false) {
+              //プラットフォームアカウント(Google限定???)で認証できた
+
+            } else {
+              //指示された認証ができた（このパターンは予定、未確認）
+              _authorizing = false;
+            }
+
+            getUserTest2().then((value) {
+              debugPrint('userRefの値 ' + value);
+            });
+
+            debugPrint('snapshot.data = ' + snapshot.data.toString());
+            debugPrint('snapshot.data.displayName = ' + fbUser.displayName);
+            debugPrint(
+                'snapshot.data.providerId = ' + fbUser.runtimeType.toString());
+            return Scaffold(body: Text('認証したよ'));
+          }
+ */
+          //return _buildBody2(context);
+        });
+  }
+
+  //ユーザーの追加
+  _addUser(FirebaseUser fbUser) async {
+    //別画面で入力、保存
+    final args =
+        EditAccountArgs.forNew(fbUser.uid, User.fromFirebaseUser(fbUser));
+    Navigator.of(context).pushNamed('/edit_account', arguments: args);
+/*
+    final name = 'TEST-' + (Math.Random().nextInt(9999).toString());
+    UserDatastore.addUser(User(name, '', false)).then((UserDocument userDoc) {
+      UserRefDatastore.addUserRef(uid, userDoc.docId)
+          .then((UserRefDocument refDoc) {
+        debugPrint('ユーザー登録したよ $name');
+      }).catchError((err) {
+        debugPrint('参照の登録失敗');
+      });
+    }).catchError((err) {
+      debugPrint('ユーザーの登録失敗');
+    });
+*/
+  }
+
+  //テスト
+  Future<String> getUserTest2({String uid = 'XBdkoojwHWRciJ7R1h8Q'}) async {
+    DocumentSnapshot snapshot;
+    try {
+      snapshot = await Firestore.instance.document("uids/$uid").get();
+    } catch (e) {
+      debugPrint('getUserTest()で例外 ' + e.toString());
+      return null;
+    }
+    if (!snapshot.exists) return null;
+    DocumentReference ref = snapshot.data['userRef'];
+    DocumentSnapshot snapshot2 = await ref.get();
+    if (!snapshot2.exists) return null;
+    return snapshot2.data['displayName'];
+  }
+
+  /*
+  Widget _buildBody2(BuildContext context) {
     //フローティングボタン
     Widget floatButton = (Globals.ponoUser == null)
         ? null
@@ -85,7 +254,7 @@ class _HomeState extends State<Home> {
 
     //管理者メニューを表示するか
     bool adminMenu =
-        (Globals.ponoUser != null && Globals.ponoUser.user.administrator);
+        (Globals.ponoUser != null && Globals.ponoUser.data.administrator);
 
     return StreamBuilder(
         stream: _authSignInStream.stream,
@@ -116,17 +285,17 @@ class _HomeState extends State<Home> {
             //appBar左のアバターアイコン
             if (Globals.ponoUser == null) {
               iconButton = Text(''); //ログインしていない
-            } else if (Globals.ponoUser.user.iconURL.length == 0) {
+            } else if (Globals.ponoUser.data.iconURL.length == 0) {
               //アバター未設定
               iconButton = IconButton(
-                icon: Globals.ponoUser.user.getCircleAvatar(),
+                icon: MyWidget.getCircleAvatar(Globals.ponoUser.data.iconURL),
                 onPressed: () {
                   _scaffoldKey.currentState.openDrawer();
                 },
               );
             } else {
               iconButton = IconButton(
-                icon: Globals.ponoUser.user.getCircleAvatar(),
+                icon: MyWidget.getCircleAvatar(Globals.ponoUser.data.iconURL),
                 onPressed: () {
                   _scaffoldKey.currentState.openDrawer();
                 },
@@ -153,8 +322,8 @@ class _HomeState extends State<Home> {
               body: Text('なんか'),
               floatingActionButton: floatButton);
         });
-  }
-
+  }*/
+/*
   //新しいアカウントを作成するために画面遷移する
   void _handleNewAccount() async {
     //build中に移動できないので、タイマーで非同期から実行
@@ -176,6 +345,9 @@ class _HomeState extends State<Home> {
     });
   }
 
+ */
+
+/*
   //管理者メニューが選択された
   void _handlePopupMenuSelected(String value) {
     switch (value) {
@@ -184,6 +356,9 @@ class _HomeState extends State<Home> {
     }
   }
 
+ */
+
+/*
   //ログインできない場合にウェルカム画面
   Widget _buildWelcome() {
     return Center(
@@ -231,6 +406,8 @@ class _HomeState extends State<Home> {
         ]));
   }
 
+ */
+/*
   void doRegularAuthentication() {
     //streamにnullを設定することで、認証待ち状態(画面)に戻すことができる
     //FutureBuilderではこれができなかった
@@ -243,7 +420,7 @@ class _HomeState extends State<Home> {
       _authSignInStream.sink.addError(err.toString());
     });
   }
-
+*/
   Widget _buildDrawer(BuildContext context) {
     var _city = '';
     if (Globals.ponoUser == null) return null;
@@ -256,11 +433,12 @@ class _HomeState extends State<Home> {
               Container(
                   width: 100,
                   height: 100,
-                  child: Globals.ponoUser.user.getCircleAvatar()),
+                  child:
+                      MyWidget.getCircleAvatar(Globals.ponoUser.data.iconURL)),
               Expanded(
                   child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Text(Globals.ponoUser.user.displayName,
+                child: Text(Globals.ponoUser.data.displayName,
                     style: TextStyle(color: Colors.white)),
               ))
             ]),
@@ -283,7 +461,7 @@ class _HomeState extends State<Home> {
           ),
           ListTile(
             title: Text('ユーザーアカウント'),
-            onTap: _handleEditAccount,
+            //onTap: _handleEditAccount,
           ),
           ListTile(
             title: Text('Dallas'),
@@ -311,20 +489,21 @@ class _HomeState extends State<Home> {
     );
   }
 
+  /*
   //アカウントの編集
   void _handleEditAccount() async {
     final userDoc = await Navigator.of(context)
         .pushNamed('/edit_account', arguments: EditAccountArgs(false));
     if (userDoc != null && userDoc is UserDocument) {
-      debugPrint(Globals.ponoUser.user.displayName +
+      debugPrint(Globals.ponoUser.data.displayName +
           ' to ' +
-          userDoc.user.displayName);
+          userDoc.data.displayName);
       setState(() {
         Globals.ponoUser = userDoc;
       });
     }
   }
-
+*/
   Widget _buildBody(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: Firestore.instance.collection('problems').snapshots(),
