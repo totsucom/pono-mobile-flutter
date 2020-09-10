@@ -10,8 +10,8 @@ import 'package:pono_problem_app/utils/my_widget.dart';
 
 //このrouteにpushする場合に渡すパラメータ
 class BasePictureViewArgs {
-  String documentID;
-  GlobalKey<ScaffoldState> scaffoldGlobalKey;
+  final String documentID;
+  final GlobalKey<ScaffoldState> scaffoldGlobalKey;
   BasePictureViewArgs(this.documentID, this.scaffoldGlobalKey);
 }
 
@@ -50,6 +50,8 @@ class _BasePictureViewState extends State<BasePictureView> {
           //表示中のデータが削除されると、streamがnullを返すため、ビルダーで
           //エラーが発生してしまうが、エラーを表示してもしかたないので
           //前画面に戻してしまう。
+          MyDialog.errorSnackBar(_arguments.scaffoldGlobalKey,
+              '表示中の${BasePicture.baseName}が削除されました。');
           Navigator.of(context).pop();
         }
       });
@@ -99,15 +101,28 @@ class _BasePictureViewState extends State<BasePictureView> {
         child: StreamBuilder<DocumentSnapshot>(
       stream: BasePictureDatastore.getBasePictureStream(docID),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return Center(child: LinearProgressIndicator());
-        }
+        //定型文
+        if (snapshot == null || (!snapshot.hasData && !snapshot.hasError))
+          return MyWidget.loading(context);
+        if (snapshot.hasError)
+          return MyWidget.error(context, snapshot.error.toString());
+        //一応、前のん
+        //if (!snapshot.hasData) {
+        //  return Center(child: LinearProgressIndicator());
+        //}
         return _buildView(context, snapshot.data);
       },
     ));
   }
 
   Widget _buildView(BuildContext context, DocumentSnapshot snapshot) {
+    // 第三者がドキュメントを削除したときに、下記のコンストラクタで null 例外が発生する
+    // のを*一時的に回避。　※このコードを StreamBuilder の直後の、 .hasData 判定に
+    // 置いても防ぐことができない。なんでだろう
+    // *一時的に回避というのは、別途リスナーで監視しているため、即座に前画面に pop()
+    // するようになっている
+    if (snapshot.data == null) return Text('');
+
     basePictureDoc = BasePictureDocument(
         snapshot.documentID, BasePicture.fromMap(snapshot.data));
 
@@ -125,8 +140,7 @@ class _BasePictureViewState extends State<BasePictureView> {
             child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                 child: Row(children: <Widget>[
-                  Text(basePictureDoc.basePicture.name,
-                      textAlign: TextAlign.left),
+                  Text(basePictureDoc.data.name, textAlign: TextAlign.left),
                   IconButton(
                       icon: Icon(Icons.edit),
                       onPressed: () {
@@ -140,14 +154,13 @@ class _BasePictureViewState extends State<BasePictureView> {
             flex: 4,
             child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                child: Text(BasePictureFieldCaption.userID,
+                child: Text(BasePictureFieldCaption.uid,
                     textAlign: TextAlign.right))),
         Expanded(
             flex: 6,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-              child: MyWidget.displayNameFutureBuilder(
-                  basePictureDoc.basePicture.userID),
+              child: MyWidget.displayNameFutureBuilder(basePictureDoc.data.uid),
             )),
       ]),
       Row(children: <Widget>[
@@ -162,8 +175,7 @@ class _BasePictureViewState extends State<BasePictureView> {
             flex: 6,
             child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                child: Text(
-                    Formatter.toYMD_HM(basePictureDoc.basePicture.createdAt),
+                child: Text(Formatter.toYMD_HM(basePictureDoc.data.createdAt),
                     textAlign: TextAlign.left))),
       ]),
       Row(children: <Widget>[
@@ -181,7 +193,7 @@ class _BasePictureViewState extends State<BasePictureView> {
             flex: 6,
             child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                child: Text(basePictureDoc.documentId,
+                child: Text(basePictureDoc.docId,
                     textAlign: TextAlign.left,
                     style: TextStyle(
                         fontStyle: FontStyle.italic,
@@ -190,7 +202,7 @@ class _BasePictureViewState extends State<BasePictureView> {
       Padding(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
           child: CachedNetworkImage(
-            imageUrl: basePictureDoc.basePicture.pictureURL,
+            imageUrl: basePictureDoc.data.pictureURL,
             placeholder: (context, url) =>
                 Center(child: CircularProgressIndicator()),
             errorWidget: (context, url, error) => Icon(
@@ -206,7 +218,7 @@ class _BasePictureViewState extends State<BasePictureView> {
         caption: BasePicture.baseName,
         labelText: 'この${BasePicture.baseName}を削除しますか？');
     if (result == MyDialogResult.Yes) {
-      BasePictureDatastore.deleteBasePicture(doc.documentId).then((_) {
+      BasePictureDatastore.deleteBasePicture(doc.docId).then((_) {
         //GlobalKeyは前画面のものを使う。削除したら前画面に戻るため
         MyDialog.successfulSnackBar(_arguments.scaffoldGlobalKey, '削除しました');
       }).catchError((err) {
@@ -220,15 +232,14 @@ class _BasePictureViewState extends State<BasePictureView> {
     final MyDialogTextResult inputResult = await MyDialog.inputText(context,
         caption: BasePicture.baseName,
         labelText: BasePictureFieldCaption.name,
-        initialText: doc.basePicture.name,
+        initialText: doc.data.name,
         minTextLength: 1,
         maxTextLength: 20);
 
     if (inputResult != null && inputResult.result == MyDialogResult.OK) {
       //Firestoreのデータを更新
-      doc.basePicture.name = inputResult.text; //新しい名前を設定
-      BasePictureDatastore.updateBasePicture(doc.documentId, doc.basePicture)
-          .then((bool result) {
+      doc.data.name = inputResult.text; //新しい名前を設定
+      BasePictureDatastore.updateBasePicture(doc).then((bool result) {
         //成功
       }).catchError((err) {
         //失敗

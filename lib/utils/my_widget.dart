@@ -36,20 +36,6 @@ class MyWidget {
   }
 
   // ユーザーから安全にアバターウィジェットを作成
-  /*static Widget getCircleAvatar(User user) {
-    if (user.iconURL == null || user.iconURL.length == 0) {
-      return CircleAvatar(
-        backgroundImage: AssetImage('images/user_image_64.png'),
-        backgroundColor: Colors.black12,
-      );
-    } else {
-      return CircleAvatar(
-        backgroundImage: NetworkImage(user.iconURL),
-        backgroundColor: Colors.transparent,
-      );
-    }
-  }*/
-  //CachedImage版
   static Widget getCircleAvatar(String iconURL) {
     if (iconURL == null || iconURL.length == 0) {
       return CircleAvatar(

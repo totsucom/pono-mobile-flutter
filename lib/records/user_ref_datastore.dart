@@ -1,3 +1,4 @@
+/*
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:pono_problem_app/records/user.dart';
@@ -29,12 +30,7 @@ class UserRefDatastore {
 
     return UserRefDocument(uidOfFirebase, UserRef.fromMap(map));
 
-    /*  completer.complete(UserRefDocument(uidOfFirebase, UserRef.fromMap(map)));
-    } catch (e) {
-      debugPrint('UserRefDatastore.addUserRef()で例外 ' + e.toString());
-      completer.completeError(e.toString());
-    }
-    return completer.future;*/
+
   }
 
   // UserRefを取得する
@@ -57,27 +53,6 @@ class UserRefDatastore {
         .snapshots();
   }
 
-  /*
-  static Future<UserRefDocument> getUserRefFutureBuilder(String uidOfFirebase) async {
-    var completer = new Completer<UserRefDocument>();
-    try {
-      debugPrint('UserRefを取得する ' + getDocumentPath(uidOfFirebase));
-      final snapshot = await Firestore.instance
-          .document(getDocumentPath(uidOfFirebase))
-          .get();
-      if (!snapshot.exists) {
-        completer.complete(null);
-      } else {
-        final userDoc = UserRefDocument(
-            snapshot.documentID, UserRef.fromMap(snapshot.data));
-        completer.complete(userDoc);
-      }
-    } catch (e) {
-      completer.completeError(e.toString());
-    }
-    return completer.future;
-  }
-   */
 
   // FirebaseUser から User を取得する
   // User が存在しない場合はnullを返す
@@ -132,3 +107,4 @@ class UserRefDatastore {
     });
   }
 }
+*/

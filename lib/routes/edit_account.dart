@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,21 +16,25 @@ import '../globals.dart';
 
 //このrouteにpushする場合に渡すパラメータ
 class EditAccountArgs {
-  bool newAccount;
-  String uidOfFirebaseUser;
-  String documentID;
-  User user;
+  //final GlobalKey<ScaffoldState> scaffoldGlobalKey; //戻り先の画面でスナックバーを表示させるのに使う
 
-  EditAccountArgs.forNew(String uidOfFirebaseUser, User user) {
-    newAccount = true;
-    this.uidOfFirebaseUser = uidOfFirebaseUser;
-    this.user = user;
+  bool _newAccount;
+  get newAccount => _newAccount;
+  User _user;
+  get user => _user;
+  String _documentID;
+  get documentID => _documentID;
+
+  EditAccountArgs.forNew(/*this.scaffoldGlobalKey,*/ UserDocument userDoc) {
+    _newAccount = true;
+    _user = userDoc.data;
+    _documentID = userDoc.docId;
   }
 
-  EditAccountArgs.forEdit(UserDocument userDoc) {
-    newAccount = false;
-    user = userDoc.data;
-    documentID = userDoc.docId;
+  EditAccountArgs.forEdit(/*this.scaffoldGlobalKey,*/ UserDocument userDoc) {
+    _newAccount = false;
+    _user = userDoc.data;
+    _documentID = userDoc.docId;
   }
 }
 
@@ -45,6 +50,7 @@ class _EditAccountState extends State<EditAccount> {
   String _editName;
   String _editURL;
   bool _nameDuplicated = false;
+  bool _showCheckButton = true;
 
   @override
   void initState() {
@@ -71,11 +77,14 @@ class _EditAccountState extends State<EditAccount> {
               title: Text((_arguments.newAccount) ? 'アカウントの作成' : 'アカウントの編集'),
               centerTitle: true,
               actions: [
-                FlatButton(
-                  child: Icon(Icons.check,
-                      color: Theme.of(context).primaryColorLight),
-                  onPressed: _editCompleted,
-                ),
+                if (_showCheckButton)
+                  FlatButton(
+                    child: Icon(Icons.check,
+                        color: Theme.of(context).primaryColorLight),
+                    onPressed: () {
+                      _editCompleted(context);
+                    },
+                  ),
               ],
             ),
             body: Padding(
@@ -96,7 +105,12 @@ class _EditAccountState extends State<EditAccount> {
   }
 
   //appBarのチェックボタン "✔" がタップされた
-  void _editCompleted() async {
+  void _editCompleted(BuildContext context) async {
+    setState(() {
+      //✔ボタンを隠す
+      _showCheckButton = false;
+    });
+
     // 編集された内容でユーザーを作成
     User newUser = _arguments.user.clone();
     newUser.displayName = _editName;
@@ -105,22 +119,43 @@ class _EditAccountState extends State<EditAccount> {
     try {
       if (_arguments.newAccount) {
         //新規登録
-        UserDocument userDoc = await UserDatastore.addUser(newUser);
-        UserRefDocument refDoc = await UserRefDatastore.addUserRef(
-            _arguments.uidOfFirebaseUser, userDoc.docId);
+        UserDocument userDoc =
+            await UserDatastore.addUser(_arguments.documentID, newUser);
+        //});
       } else {
         //更新
         UserDocument userDoc = await UserDatastore.updateUser(
             UserDocument(_arguments.documentID, newUser));
       }
-      //前画面に戻る
-      Navigator.of(context).pop();
     } catch (e) {
       MyDialog.ok(context,
           icon: Icon(Icons.error, color: Theme.of(context).errorColor),
           caption: 'アカウントの保存',
-          labelText: '失敗しました。表示名が他の方と重複しているのかもしれません。');
+          labelText: '失敗しました。表示名が既に使用されているかもしれません。');
+      debugPrint(e.toString());
+
+      setState(() {
+        //✔ボタンを再び表示する
+        _showCheckButton = true;
+      });
+      return;
     }
+
+    // 前画面に戻る。
+    // ※普通に上記でUserデータを更新しているせいか、普通にpop()してもHomeに戻って
+    // くれない。下記の組み合わせで成功
+    // 1. 下記のように Delayed() を使った
+    // 2. 単純なpop()ではなく、popUntil() を使った
+    // 3. ✔ボタンの２度押し回避
+    Future.delayed(Duration(milliseconds: 500)).then((_) async {
+      //MyDialog.successfulSnackBar(_arguments.scaffoldGlobalKey,
+      //    (_arguments.newAccount) ? 'ユーザーアカウントを作成しました。' : 'ユーザーアカウントを更新しました。');
+      //Navigator.of(context).popUntil(ModalRoute.withName("/"));
+
+      final snackBar = MyDialog.successfulSnackBarWidget(
+          (_arguments.newAccount) ? 'ユーザーアカウントを作成しました。' : 'ユーザーアカウントを更新しました。');
+      Navigator.of(context).pop(snackBar);
+    });
   }
 
   Widget _buildView(BuildContext context) {
@@ -129,10 +164,11 @@ class _EditAccountState extends State<EditAccount> {
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
           child: GestureDetector(
             child: Container(
-                height: 100,
-                width: 100,
-                //color: Colors.yellow,
-                child: MyWidget.getCircleAvatar(_editURL)),
+              height: 100,
+              width: 100,
+              //color: Colors.yellow,
+              child: MyWidget.getCircleAvatar(_editURL),
+            ),
             onTap: selectIconSource,
           )),
       Row(children: <Widget>[
@@ -199,7 +235,7 @@ class _EditAccountState extends State<EditAccount> {
             flex: 4,
             child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                child: Text((_arguments.newAccount) ? 'FB.uid' : 'DocumentID',
+                child: Text('DocumentID',
                     textAlign: TextAlign.right,
                     style: TextStyle(
                         fontStyle: FontStyle.italic,
@@ -208,10 +244,7 @@ class _EditAccountState extends State<EditAccount> {
             flex: 6,
             child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                child: Text(
-                    (_arguments.newAccount)
-                        ? _arguments.uidOfFirebaseUser
-                        : _arguments.documentID,
+                child: Text(_arguments.documentID,
                     textAlign: TextAlign.left,
                     style: TextStyle(
                         fontStyle: FontStyle.italic,

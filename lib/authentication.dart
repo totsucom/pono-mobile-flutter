@@ -13,7 +13,7 @@ import 'my_theme.dart';
 class Authentication {
   // googleログイン
   static Future<FirebaseUser> handleGoogleAuth(
-      {bool silentOnly = false}) async {
+      [bool silentSignIn = true, bool inputSignIn = true]) async {
     var completer = new Completer<FirebaseUser>();
 
     debugPrint('handleGoogleAuth() 認証開始');
@@ -23,11 +23,11 @@ class Authentication {
 
     GoogleSignInAccount googleCurrentUser = googleSignIn.currentUser;
     try {
-      if (googleCurrentUser == null) {
+      if (googleCurrentUser == null && silentSignIn) {
         googleCurrentUser = await googleSignIn.signInSilently();
         //debugPrint("サイレントログイン " + ((googleCurrentUser == null) ? '失敗' : '成功'));
       }
-      if (googleCurrentUser == null && !silentOnly) {
+      if (googleCurrentUser == null && inputSignIn) {
         googleCurrentUser = await googleSignIn.signIn();
         //debugPrint("ログイン " + ((googleCurrentUser == null) ? '失敗' : '成功'));
       }

@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:pono_problem_app/records/base_picture.dart';
 import 'package:pono_problem_app/records/problem.dart';
 import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user_datastore.dart';
@@ -21,8 +22,10 @@ import '../my_theme.dart';
 import '../authentication.dart';
 import 'dart:math' as Math;
 
+import 'manage_base_picture_route.dart';
+
 class _HomeAppBarPopupMenuItem {
-  static const manageBasePicture = '壁写真の管理';
+  static const manageBasePicture = BasePicture.baseName + 'の管理';
 }
 
 class Home extends StatefulWidget {
@@ -33,14 +36,20 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  //認証、ログインを管理するストリーム
-  final _authSignInStream = StreamController<_AuthSignInResult>();
+  final _authAppBarTitle = 'PONO課題アプリ';
 
+  //認証、ログインを管理するストリーム
+  //final _authSignInStream = StreamController<_AuthSignInResult>();
   final _auth = FirebaseAuth.instance;
 
+  //現在の認証ソース。Noneはデバイス（スマホ）ユーザーでの認証を示す
+  AuthMethod _authMethod = AuthMethod.None;
+
+  //ドロワーやスナックバーで使うキー
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  bool _authorizing = false;
+  //キーが準備できていないときにスナックバーを一時的に保管
+  Widget _waitingSnackBar;
 
   //appBarのポップアップメニュー
   List<MenuItem<String>> _appBarPopupMenuItems = [
@@ -52,7 +61,7 @@ class _HomeState extends State<Home> {
   @override
   void dispose() {
     super.dispose();
-    _authSignInStream.close();
+    //_authSignInStream.close();
   }
 
   Future<FirebaseUser> _authenticationFuture;
@@ -60,40 +69,15 @@ class _HomeState extends State<Home> {
   @override
   void initState() {
     super.initState();
-/*
-    Future.delayed(Duration.zero).then((_) async {
-      Globals.loadSettings().then((_) async {
-        debugPrint('設定を読み込みました');
 
-        if (Globals.authMethod == AuthMethod.None) {
-          debugPrint('認証方法が設定されていません');
-
-          final items = [
-            MyDialogItem('Google', icon: Icon(Icons.gamepad)),
-          ];
-          MyDialogIntResult res;
-          while (true) {
-            res = await MyDialog.selectItem(context, setState, items,
-                caption: '認証方法の選択', label: 'へいへい');
-            if (res.result == MyDialogResult.OK) break;
-          }
-          switch (res.value) {
-            case 1:
-              debugPrint('Google認証が選択されました');
-              Globals.authMethod = AuthMethod.Google;
-              Globals.saveSettings();
-          }
-        }
-        switch (Globals.authMethod) {
-          case AuthMethod.Google:
-            debugPrint('Google認証を開始します');
-            _authenticationFuture = Authentication.google(_auth);
-            break;
-        }
-      });
+    Globals.loadSettings().then((_) {
+      if (Globals.authMethod == AuthMethod.Google) {
+        // Google認証が指定されているので実行
+        debugPrint('Google認証が指定されているので実行');
+        _currentAuthMethod = AuthMethod.Google;
+        Authentication.handleGoogleAuth();
+      }
     });
-
- */
 
     WidgetsBinding.instance.addPostFrameCallback((_) => afterBuild(context));
   }
@@ -108,255 +92,198 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     debugPrint("home_routeのbuild()");
 
+    // Firebaseの認証ストリーム
     return StreamBuilder(
         stream: _auth.onAuthStateChanged,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            //認証中
-            return Scaffold(body: MyWidget.loading(context, '認証中...。'));
+            //認証中（最初はデフォルトでプラットフォーム認証が行われる）
+            return Scaffold(
+                appBar: AppBar(
+                  title: Text(_authAppBarTitle),
+                  centerTitle: true,
+                ),
+                body: MyWidget.loading(context, '認証中...。'));
           } else if (!snapshot.hasData) {
-            //認証できなかったので認証候補を選択
-            return Scaffold(body: Text('認証画面を表示'));
+            // 認証できなかった
+            // 通常はここに来ないはず。（Androidを使っている以上、Googleアカウントで
+            // サインインしているから。
+            return _buildTestAuth(context);
           } else {
+            // 認証された
             FirebaseUser fbUser = snapshot.data;
-            debugPrint(
-                '認証された FirebaseUser = ${fbUser.uid} ${fbUser.displayName}');
+            debugPrint('認証された ' +
+                _currentAuthMethod.toString() +
+                ' FirebaseUser = ${fbUser.uid} ${fbUser.displayName} ' +
+                fbUser.toString());
 
+            // Firestoreのユーザーストリーム
             return StreamBuilder(
-                stream: UserRefDatastore.getUserRefStream(fbUser.uid),
+                stream: UserDatastore.getUserStream(fbUser.uid),
                 builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
-                  debugPrint(
-                      'snapshot.hasData = ' + snapshot.hasData.toString());
-                  debugPrint(
-                      'snapshot.hasError = ' + snapshot.hasError.toString());
-
                   if (!snapshot.hasData) {
                     return Scaffold(
-                        body: MyWidget.loading(context, 'ユーザー参照を取得中...。'));
+                        appBar: AppBar(
+                          title: Text(_authAppBarTitle),
+                          centerTitle: true,
+                        ),
+                        body: MyWidget.loading(context, 'ユーザーを取得中...。'));
                   } else {
                     if (snapshot.data.data == null) {
-                      return Scaffold(
-                          body: Column(children: <Widget>[
-                        Text('ユーザーなし（参照無し）'),
-                        RaisedButton(
-                          child: Text('ユーザー追加'),
-                          onPressed: () {
-                            _addUser(fbUser);
-                          },
-                        )
-                      ]));
+                      // PONOユーザーの実体が見つからない
+                      return _buildNewUserView(context, fbUser);
                     } else {
-                      UserRef userRef = UserRef.fromMap(snapshot.data.data);
-                      return StreamBuilder(
-                          stream: UserDatastore.getUserStream(userRef.userID),
-                          builder: (context,
-                              AsyncSnapshot<DocumentSnapshot> snapshot) {
-                            if (!snapshot.hasData) {
-                              return Scaffold(
-                                  body: MyWidget.loading(
-                                      context, 'ユーザーを取得中...。'));
-                            } else {
-                              if (snapshot.data.data == null) {
-                                return Scaffold(
-                                    body: Column(children: <Widget>[
-                                  Text('ユーザーなし（実体無し）'),
-                                  RaisedButton(
-                                    child: Text('ユーザー追加'),
-                                    onPressed: () {
-                                      _addUser(fbUser);
-                                    },
-                                  )
-                                ]));
-                              } else {
-                                User user = User.fromMap(snapshot.data.data);
-                                return Scaffold(
-                                    body: Text('ユーザー ' + user.displayName));
-                              }
-                            }
-                          });
+                      // PONOユーザーの実体が見つかった
+                      final User user = User.fromMap(snapshot.data.data);
+                      final userDoc =
+                          UserDocument(snapshot.data.documentID, user);
+                      // ユーザーを記憶する
+                      Globals.setCurrentUser(userDoc).then((bool changed) {
+                        if (changed) {
+                          debugPrint(Globals.isCurrentUserAdmin
+                              ? '管理者です'
+                              : '管理者ではありません');
+                          setState(() {});
+                        }
+                      }).catchError((err) {});
+                      return _buildMainScaffold(context, user);
                     }
                   }
                 });
           }
-/*
-            if (_authorizing == false) {
-              //プラットフォームアカウント(Google限定???)で認証できた
-
-            } else {
-              //指示された認証ができた（このパターンは予定、未確認）
-              _authorizing = false;
-            }
-
-            getUserTest2().then((value) {
-              debugPrint('userRefの値 ' + value);
-            });
-
-            debugPrint('snapshot.data = ' + snapshot.data.toString());
-            debugPrint('snapshot.data.displayName = ' + fbUser.displayName);
-            debugPrint(
-                'snapshot.data.providerId = ' + fbUser.runtimeType.toString());
-            return Scaffold(body: Text('認証したよ'));
-          }
- */
-          //return _buildBody2(context);
         });
   }
 
-  //ユーザーの追加
-  _addUser(FirebaseUser fbUser) async {
-    //別画面で入力、保存
-    final args =
-        EditAccountArgs.forNew(fbUser.uid, User.fromFirebaseUser(fbUser));
-    Navigator.of(context).pushNamed('/edit_account', arguments: args);
-/*
-    final name = 'TEST-' + (Math.Random().nextInt(9999).toString());
-    UserDatastore.addUser(User(name, '', false)).then((UserDocument userDoc) {
-      UserRefDatastore.addUserRef(uid, userDoc.docId)
-          .then((UserRefDocument refDoc) {
-        debugPrint('ユーザー登録したよ $name');
-      }).catchError((err) {
-        debugPrint('参照の登録失敗');
-      });
-    }).catchError((err) {
-      debugPrint('ユーザーの登録失敗');
-    });
-*/
-  }
+  AuthMethod _currentAuthMethod = AuthMethod.None;
 
-  //テスト
-  Future<String> getUserTest2({String uid = 'XBdkoojwHWRciJ7R1h8Q'}) async {
-    DocumentSnapshot snapshot;
-    try {
-      snapshot = await Firestore.instance.document("uids/$uid").get();
-    } catch (e) {
-      debugPrint('getUserTest()で例外 ' + e.toString());
-      return null;
+  // 認証ができなかったときに他の認証の選択肢を表示する
+  Widget _buildTestAuth(BuildContext context) {
+    String msg;
+    switch (_currentAuthMethod) {
+      case AuthMethod.None:
+        msg = 'プラットフォーム認証に失敗しました。';
+        break;
+      case AuthMethod.Google:
+        msg = 'Google認証に失敗しました。';
+        break;
     }
-    if (!snapshot.exists) return null;
-    DocumentReference ref = snapshot.data['userRef'];
-    DocumentSnapshot snapshot2 = await ref.get();
-    if (!snapshot2.exists) return null;
-    return snapshot2.data['displayName'];
-  }
+    msg += '認証方法を選択してください。';
 
-  /*
-  Widget _buildBody2(BuildContext context) {
-    //フローティングボタン
-    Widget floatButton = (Globals.ponoUser == null)
-        ? null
-        : FloatingActionButton(
-            child: Icon(Icons.add),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_authAppBarTitle),
+        centerTitle: true,
+      ),
+      body: Column(
+        children: <Widget>[
+          Text(msg),
+          RaisedButton(
+            child: Text('Google認証'),
             onPressed: () {
-              Navigator.of(context)
-                  .pushNamed('/edit_problem/select_base_picture');
+              _currentAuthMethod = AuthMethod.Google;
+              Authentication.handleGoogleAuth(false, true).then((fbUser) {
+                // Google認証が成功したので方法を記憶
+                Globals.authMethod = AuthMethod.Google;
+                Globals.saveSettings();
+              });
             },
-          );
-
-    //管理者メニューを表示するか
-    bool adminMenu =
-        (Globals.ponoUser != null && Globals.ponoUser.data.administrator);
-
-    return StreamBuilder(
-        stream: _authSignInStream.stream,
-        builder:
-            (BuildContext context, AsyncSnapshot<_AuthSignInResult> snapshot) {
-          if (snapshot == null || (!snapshot.hasData && !snapshot.hasError)) {
-            //処理待ち
-            return Scaffold(body: MyWidget.loading(context, '認証／ログイン中です...。'));
-          }
-          if (snapshot.hasError) {
-            //認証ができなかったので、認証方法を選択させる
-            return Scaffold(body: _buildWelcome());
-          }
-
-          /*
-           * 少なくとも認証ができた
-           */
-
-          Widget iconButton;
-          _AuthSignInResult result = snapshot.data;
-          Globals.firebaseUser = result.fbUser;
-          Globals.ponoUser = result.appUser;
-
-          if (result.appUser == null) {
-            //ログインできていない⇒ユーザー登録画面に移動
-            _handleNewAccount();
-          } else {
-            //appBar左のアバターアイコン
-            if (Globals.ponoUser == null) {
-              iconButton = Text(''); //ログインしていない
-            } else if (Globals.ponoUser.data.iconURL.length == 0) {
-              //アバター未設定
-              iconButton = IconButton(
-                icon: MyWidget.getCircleAvatar(Globals.ponoUser.data.iconURL),
-                onPressed: () {
-                  _scaffoldKey.currentState.openDrawer();
-                },
-              );
-            } else {
-              iconButton = IconButton(
-                icon: MyWidget.getCircleAvatar(Globals.ponoUser.data.iconURL),
-                onPressed: () {
-                  _scaffoldKey.currentState.openDrawer();
-                },
-              );
-            }
-          }
-          return Scaffold(
-              key: _scaffoldKey,
-              appBar: new AppBar(
-                leading: iconButton,
-                title: Text('ホーム'),
-                centerTitle: true,
-                actions: <Widget>[
-                  if (adminMenu)
-                    PopupMenuButton<String>(
-                        onSelected: _handlePopupMenuSelected,
-                        itemBuilder: (BuildContext context) =>
-                            _appBarPopupMenuItems
-                                .map((e) => e.toPopupMenuItem())
-                                .toList()),
-                ],
-              ),
-              drawer: _buildDrawer(context),
-              body: Text('なんか'),
-              floatingActionButton: floatButton);
-        });
-  }*/
-/*
-  //新しいアカウントを作成するために画面遷移する
-  void _handleNewAccount() async {
-    //build中に移動できないので、タイマーで非同期から実行
-    Future.delayed(new Duration(milliseconds: 500)).then((_) async {
-      //戻ってきたときに再認証したいので、awaitで待つ
-      await Navigator.of(context)
-          .pushNamed('/edit_account', arguments: EditAccountArgs(true));
-
-      //streamにnullを設定することで、認証待ち状態(画面)に戻すことができる
-      //FutureBuilderではこれができなかった
-      _authSignInStream.sink.add(null);
-
-      //最初のログイン処理を開始、結果をStreamBuilderに渡してる
-      _initAndQuickSignIn().then((_AuthSignInResult result) {
-        _authSignInStream.sink.add(result);
-      }).catchError((err) {
-        _authSignInStream.sink.addError(err.toString());
-      });
-    });
+          )
+        ],
+      ),
+    );
   }
 
- */
+  Widget _buildNewUserView(BuildContext context, FirebaseUser fbUser) {
+    // 本来はアカウント選択用のウイジェットを表示するが、現状は選択肢が無いため
+    // アカウント作成ページにジャンプする。
 
-/*
+    // ビルド中にジャンプできないので別タスクから
+    Future.delayed(Duration.zero).then((_) async {
+      final args = EditAccountArgs.forNew(//_scaffoldKey,
+          UserDocument(fbUser.uid, User.fromFirebaseUser(fbUser)));
+
+      //アカウント作成画面に移動。スナックバーのウイジェットを受け取る
+      final snackBar = await Navigator.of(context)
+          .pushNamed('/edit_account', arguments: args);
+      if (snackBar is Widget) {
+        //スナックバーを表示できるならすぐに表示するが、そうでない場合は一時保管
+        debugPrint('edit_accountからスナックバーウィジェットを受け取りました');
+        if (_scaffoldKey.currentState != null) {
+          debugPrint('スナックバーウィジェットを表示します');
+          _scaffoldKey.currentState.showSnackBar(snackBar);
+        } else {
+          debugPrint('スナックバーウィジェットは一時保管します');
+          _waitingSnackBar = snackBar;
+        }
+      }
+    });
+    //すぐに移動するのでほとんど表示されない
+    return Scaffold(
+        appBar: AppBar(
+          title: Text(_authAppBarTitle),
+          centerTitle: true,
+        ),
+        body: Text('アカウントを作成します...'));
+  }
+
+  Widget _buildMainScaffold(BuildContext context, User user) {
+    //スナックバーが待機中であれば表示する
+    if (_waitingSnackBar != null) {
+      debugPrint('一時保管されたスナックバーウィジェットを表示してみたい');
+      Future.delayed(Duration(milliseconds: 100)).then((_) {
+        if (_scaffoldKey.currentState != null) {
+          _scaffoldKey.currentState.showSnackBar(_waitingSnackBar);
+          _waitingSnackBar = null;
+        }
+      });
+    }
+
+    return Scaffold(
+        key: _scaffoldKey,
+        appBar: AppBar(
+          leading: GestureDetector(
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: MyWidget.getCircleAvatar(user.iconURL),
+            ),
+            onTap: () {
+              _scaffoldKey.currentState.openDrawer();
+            },
+          ),
+          title: Text('ホーム'),
+          centerTitle: true,
+          actions: <Widget>[
+            if (Globals.isCurrentUserAdmin)
+              PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.vpn_key,
+                    color: Colors.yellow,
+                  ),
+                  onSelected: _handlePopupMenuSelected,
+                  itemBuilder: (BuildContext context) => _appBarPopupMenuItems
+                      .map((e) => e.toPopupMenuItem())
+                      .toList()),
+          ],
+        ),
+        drawer: _buildDrawer(context, user),
+        body: Text('なんか'),
+        floatingActionButton: FloatingActionButton(
+          child: Icon(Icons.add),
+          onPressed: () {
+            Navigator.of(context)
+                .pushNamed('/edit_problem/select_base_picture');
+          },
+        ));
+  }
+
   //管理者メニューが選択された
   void _handlePopupMenuSelected(String value) {
     switch (value) {
       case _HomeAppBarPopupMenuItem.manageBasePicture:
-        Navigator.of(context).pushNamed('/manage_base_picture');
+        Navigator.of(context).pushNamed('/manage_base_picture',
+            arguments: ManageBasePictureArgs(_scaffoldKey));
     }
   }
-
- */
 
 /*
   //ログインできない場合にウェルカム画面
@@ -421,10 +348,7 @@ class _HomeState extends State<Home> {
     });
   }
 */
-  Widget _buildDrawer(BuildContext context) {
-    var _city = '';
-    if (Globals.ponoUser == null) return null;
-
+  Widget _buildDrawer(BuildContext context, User user) {
     return Drawer(
       child: ListView(
         children: <Widget>[
@@ -433,12 +357,13 @@ class _HomeState extends State<Home> {
               Container(
                   width: 100,
                   height: 100,
-                  child:
-                      MyWidget.getCircleAvatar(Globals.ponoUser.data.iconURL)),
+                  child: MyWidget.getCircleAvatar(user.iconURL)),
               Expanded(
                   child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Text(Globals.ponoUser.data.displayName,
+                child: Text(
+                    user.displayName +
+                        (Globals.isCurrentUserAdmin ? '\n（管理者）' : ''),
                     style: TextStyle(color: Colors.white)),
               ))
             ]),
@@ -461,49 +386,30 @@ class _HomeState extends State<Home> {
           ),
           ListTile(
             title: Text('ユーザーアカウント'),
-            //onTap: _handleEditAccount,
-          ),
-          ListTile(
-            title: Text('Dallas'),
-            onTap: () {
-              setState(() => _city = 'Dallas, TX');
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            title: Text('Seattle'),
-            onTap: () {
-              setState(() => _city = 'Seattle, WA');
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            title: Text('Tokyo'),
-            onTap: () {
-              setState(() => _city = 'Tokyo, Japan');
-              Navigator.pop(context);
-            },
+            onTap: _handleEditAccount,
           ),
         ],
       ),
     );
   }
 
-  /*
   //アカウントの編集
   void _handleEditAccount() async {
-    final userDoc = await Navigator.of(context)
-        .pushNamed('/edit_account', arguments: EditAccountArgs(false));
-    if (userDoc != null && userDoc is UserDocument) {
-      debugPrint(Globals.ponoUser.data.displayName +
-          ' to ' +
-          userDoc.data.displayName);
-      setState(() {
-        Globals.ponoUser = userDoc;
-      });
+    final args = EditAccountArgs.forEdit(//_scaffoldKey,
+        UserDocument(Globals.currentUserID, Globals.currentUser));
+
+    //アカウント作成画面に移動。スナックバーのウイジェットを受け取る
+    final snackBar =
+        await Navigator.of(context).pushNamed('/edit_account', arguments: args);
+    if (snackBar is Widget) {
+      //_scaffoldKey.currentStateがnullでなかったら表示するようにしていたが、
+      //そのパターンでもスナックバーが表示されないことがシミュレーターで見られたので
+      //どの場合でも一旦保管して、_buildBodyから表示することにした。
+      debugPrint('スナックバーウィジェットは一時保管します');
+      _waitingSnackBar = snackBar;
     }
   }
-*/
+
   Widget _buildBody(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: Firestore.instance.collection('problems').snapshots(),
@@ -540,7 +446,7 @@ class _HomeState extends State<Home> {
       ),
     );
   }
-
+/*
   // Globalsパラメータを読み込む
   // Globals.authMethodに従って、クイック認証（画面表示なし）とログインを実行する
   static Future<_AuthSignInResult> _initAndQuickSignIn() async {
@@ -678,9 +584,12 @@ class _HomeState extends State<Home> {
     completer.complete(result);
     return completer.future;
   }
+  */
 }
 
+/*
 class _AuthSignInResult {
   FirebaseUser fbUser;
   UserDocument appUser;
 }
+ */

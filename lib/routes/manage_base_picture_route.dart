@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pono_problem_app/records/base_picture.dart';
 import 'package:pono_problem_app/records/base_picture_datastore.dart';
+import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user_datastore.dart';
 import 'package:pono_problem_app/routes/base_picture_view_route.dart';
 import 'package:pono_problem_app/routes/trimming_image_route.dart';
@@ -14,6 +16,12 @@ import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/my_widget.dart';
 import '../globals.dart';
 
+//このrouteにpushする場合に渡すパラメータ
+class ManageBasePictureArgs {
+  GlobalKey<ScaffoldState> homeScaffoldGlobalKey;
+  ManageBasePictureArgs(this.homeScaffoldGlobalKey);
+}
+
 class ManageBasePicture extends StatefulWidget {
   ManageBasePicture({Key key}) : super(key: key);
 
@@ -22,6 +30,9 @@ class ManageBasePicture extends StatefulWidget {
 }
 
 class _ManageBasePictureState extends State<ManageBasePicture> {
+  //前画面から渡されたパラメータを保持
+  ManageBasePictureArgs _arguments;
+
   var _scaffoldKey = GlobalKey<ScaffoldState>();
 
   //チェックボックスの表示～削除までの仕組み
@@ -38,16 +49,69 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
   //buildが完了したときに呼び出される
   void afterBuild(context) async {
     MyDialog.informationSnackBar(
-        _scaffoldKey, 'ここで壁の写真を登録しておくと、ユーザーは課題作成時に選んで使用できるようになります。');
+        _scaffoldKey, 'ユーザーが課題を作成する場合に使用できる、ベースの壁写真を登録します。');
+
+    // 各ルートで必要な認証情報の監視
+    FirebaseAuth.instance.onAuthStateChanged
+        .listen((FirebaseUser firebaseUser) {
+      if (firebaseUser == null) {
+        // 認証ユーザーが無くなった
+        debugPrint('認証ユーザーが無くなったのでホームに強制送還します');
+        MyDialog.errorSnackBar(
+            _arguments.homeScaffoldGlobalKey, '認証情報が失われました。');
+        Navigator.of(context).popUntil(ModalRoute.withName("/"));
+      } else if (firebaseUser.uid != Globals.firebaseUser.uid) {
+        // 認証ユーザーが変わった
+        debugPrint('認証ユーザーが異なるのでホームに強制送還します');
+        MyDialog.errorSnackBar(
+            _arguments.homeScaffoldGlobalKey, '認証情報に相違が生じました。');
+        Navigator.of(context).popUntil(ModalRoute.withName("/"));
+      }
+    });
+
+    // 管理者ルートで必要なユーザー権限の監視
+    UserDatastore.getUserStream(Globals.currentUserID)
+        .listen((DocumentSnapshot documentSnapshot) {
+      if (documentSnapshot.data == null) {
+        // ユーザーが削除された
+        debugPrint('ユーザーが削除されたのでホームに強制送還します');
+        MyDialog.errorSnackBar(
+            _arguments.homeScaffoldGlobalKey, 'ユーザーが削除されました。');
+        Navigator.of(context).popUntil(ModalRoute.withName("/"));
+      } else {
+        //管理者属性を再取得する
+        Globals.reloadAdmin().then((bool admin) {
+          if (!admin) {
+            // ユーザーの管理者権限が無い
+            debugPrint('ユーザーの管理者権限が失われたのでホームに強制送還します');
+            MyDialog.errorSnackBar(
+                _arguments.homeScaffoldGlobalKey, '管理者権限が失われました。');
+            Navigator.of(context).popUntil(ModalRoute.withName("/"));
+          }
+        });
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     debugPrint("manage_base_picture_routeのbuild()");
+
+    if (_arguments == null) {
+      //前画面から渡されたパラメータを読み込む
+      _arguments = ModalRoute.of(context).settings.arguments;
+      if (_arguments == null) {
+        throw 'ManageBasePictureへのpush()にはパラメータが必要です';
+      }
+    }
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: new AppBar(
-        title: Text(BasePicture.baseName + 'の管理'),
+        title: Text(
+          BasePicture.baseName + 'の管理',
+          style: TextStyle(color: Colors.yellow),
+        ),
         centerTitle: true,
         actions: [
           if (showDustbin)
@@ -80,6 +144,7 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
                 icon: Icon(Icons.check_box_outline_blank),
                 onPressed: () => setState(() {
                   showCheckboxes = !showCheckboxes;
+                  if (!showCheckboxes) showDustbin = false;
                   if (showCheckboxes) {
                     itemChecks.forEach((key, value) {
                       itemChecks[key] = false; //チェックをクリアする
@@ -106,6 +171,7 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
     return StreamBuilder<QuerySnapshot>(
       stream: BasePictureDatastore.getBasePicturesStream(),
       builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        //定型文
         if (snapshot == null || (!snapshot.hasData && !snapshot.hasError))
           return MyWidget.loading(context);
         if (snapshot.hasError)
@@ -116,9 +182,14 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
   }
 
   Widget _buildListView(BuildContext context, List<DocumentSnapshot> snapshot) {
+    final list = snapshot.map((data) => _buildListItem(context, data)).toList();
+    if (list.length == 0)
+      return Center(
+          child: Text(BasePicture.baseName + 'はありません。\n\n＋ ボタンで追加できます。'));
+
     return ListView(
       padding: const EdgeInsets.only(top: 20.0),
-      children: snapshot.map((data) => _buildListItem(context, data)).toList(),
+      children: list,
     );
   }
 
@@ -126,7 +197,7 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
     final basePictureDoc = new BasePictureDocument(
         snapshot.documentID, BasePicture.fromMap(snapshot.data));
     return Padding(
-      key: ValueKey(basePictureDoc.documentId),
+      key: ValueKey(basePictureDoc.docId),
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Container(
         decoration: BoxDecoration(
@@ -140,22 +211,22 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
 
   Widget _buildListTile(
       BuildContext context, BasePictureDocument basePictureDoc) {
-    final dateString = Formatter.toEnnui(basePictureDoc.basePicture.createdAt);
+    final dateString = Formatter.toEnnui(basePictureDoc.data.createdAt);
     //DateFormat('yyyy/MM/dd').format(basePictureDoc.basePicture.createdAt);
 
-    if (!itemChecks.containsKey(basePictureDoc.documentId)) {
-      itemChecks[basePictureDoc.documentId] = false;
+    if (!itemChecks.containsKey(basePictureDoc.docId)) {
+      itemChecks[basePictureDoc.docId] = false;
     }
 
     debugPrint("_buildListTileの処理 BasePicture.DocumentID = " +
-        basePictureDoc.documentId.toString());
+        basePictureDoc.docId.toString());
 
     Widget leadingWidget;
-    if (basePictureDoc.basePicture.thumbnailURL.length == 0) {
-      if (basePictureDoc.basePicture.createdAt != null) {
+    if (basePictureDoc.data.thumbnailURL.length == 0) {
+      if (basePictureDoc.data.createdAt != null) {
         // ↑ 瞬間nullのパターンが発生するみたい
         final duration =
-            DateTime.now().difference(basePictureDoc.basePicture.createdAt);
+            DateTime.now().difference(basePictureDoc.data.createdAt);
         if (duration.inMinutes > 2)
           //2分越えてURLが無いのはエラーしかない
           leadingWidget =
@@ -165,10 +236,10 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
         //CloudFunctuins処理待ち(エラー表示回避)
         leadingWidget = CircularProgressIndicator();
     } else {
-      leadingWidget = (basePictureDoc.basePicture.thumbnailURL.length == 0)
+      leadingWidget = (basePictureDoc.data.thumbnailURL.length == 0)
           ? CircularProgressIndicator() //CloudFunctuins処理待ち(エラー表示回避)
           : CachedNetworkImage(
-              imageUrl: basePictureDoc.basePicture.thumbnailURL,
+              imageUrl: basePictureDoc.data.thumbnailURL,
               placeholder: (context, url) => CircularProgressIndicator(),
               errorWidget: (context, url, error) =>
                   Icon(Icons.error, color: Theme.of(context).errorColor));
@@ -178,19 +249,17 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
       leading: leadingWidget,
       /*ThumbnailDatastore.thumbnailStreamBuilder(
           context, basePictureDoc.basePicture.picturePath),*/
-      title: Text(basePictureDoc.basePicture.name),
-      subtitle: MyWidget.displayNameFutureBuilder(
-          basePictureDoc.basePicture.userID,
-          Text(dateString),
-          '${dateString}\nby{displayName}'),
+      title: Text(basePictureDoc.data.name),
+      subtitle: MyWidget.displayNameFutureBuilder(basePictureDoc.data.uid,
+          Text(dateString), '${dateString}\nby{displayName}'),
       trailing: Visibility(
         visible: showCheckboxes,
         child: Checkbox(
-          value: itemChecks[basePictureDoc.documentId],
+          value: itemChecks[basePictureDoc.docId],
           onChanged: ((bool newValue) {
             setState(() {
               //チェックボックスにチェックを設定
-              itemChecks[basePictureDoc.documentId] = newValue;
+              itemChecks[basePictureDoc.docId] = newValue;
               //チェックが１つでもあればごみ箱を表示
               var checked = newValue;
               if (!checked) {
@@ -209,8 +278,7 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
       onTap: () {
         //DocumentIDをビューワーに渡す
         Navigator.of(context).pushNamed('/manage_base_picture/view',
-            arguments:
-                BasePictureViewArgs(basePictureDoc.documentId, _scaffoldKey));
+            arguments: BasePictureViewArgs(basePictureDoc.docId, _scaffoldKey));
       },
     );
   }
@@ -304,7 +372,8 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
           labelText: BasePictureFieldCaption.name,
           hintText: 'A壁 など',
           minTextLength: 1,
-          maxTextLength: 20)
+          maxTextLength: 20,
+          dismissible: false)
     ];
     final waitResult = await Future.wait(futureList);
     final StorageResult storageResult = waitResult[0];
@@ -326,18 +395,18 @@ class _ManageBasePictureState extends State<ManageBasePicture> {
     }
 
     //ベース写真の追加
-    BasePictureDatastore.addBasePicture(
+    BasePictureDatastore.addBasePicture(BasePicture(
             storageResult.path,
             trimResult.rotation,
             trimResult.trimLeft,
             trimResult.trimTop,
             trimResult.trimRight,
             trimResult.trimBottom,
-            inputResult.text,
-            Globals.firebaseUser.uid)
-        .then((String documentID) {
+            inputResult.text))
+        .then((BasePictureDocument basePictureDoc) {
       //成功
-      MyDialog.successfulSnackBar(_scaffoldKey, '追加しました');
+      MyDialog.successfulSnackBar(
+          _scaffoldKey, '追加しました ' + basePictureDoc.docId.toString());
     }).catchError((err) {
       //失敗
       MyDialog.errorSnackBar(_scaffoldKey, '追加できませんでした\n' + err.toString());

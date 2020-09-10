@@ -1,4 +1,6 @@
 import 'package:flutter/cupertino.dart';
+import 'package:pono_problem_app/records/user_ref.dart';
+import 'package:pono_problem_app/records/user_ref_datastore.dart';
 import './user.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
@@ -9,50 +11,42 @@ class UserDatastore {
     return "users";
   }
 
+  //documentId = FirebaseUser.uid
   static String getDocumentPath(String documentId) {
     return "users/$documentId";
   }
 
   // userを追加する
-  // userが存在する場合は上書きしてしまうので、注意すること
-  // 履歴 2020/9/5 ドキュメントIDを自動生成に変更。Firebaseuser.uidとUserの関連付け
-  // はUserReferenceを用いる
-  static Future<UserDocument> addUser(/*String userID,*/ User user) async {
-    debugPrint('UserDatastore.addUser() が実行されたぞ');
-
+  static Future<UserDocument> addUser(String uid, User user) async {
     var completer = new Completer<UserDocument>();
-    try {
+    Map map;
+
+    //トランザクションを開始
+    Firestore.instance.runTransaction((Transaction tr) async {
       //同じdisplayNameを探すクエリ
       final query = await Firestore.instance
           .collection(getCollectionPath())
           .where(UserField.displayName, isEqualTo: user.displayName)
           .getDocuments();
 
-      //トランザクションを開始
-      Firestore.instance.runTransaction((Transaction tr) async {
-        if (query.documents.length == 0) {
-          //displayNameが重複してなかった
+      if (query.documents.length != 0)
+        throw UserField.displayName + ' は既に使用されています。';
 
-          //新しいUserを書き込み
-          final doc = Firestore.instance
-              .collection(getCollectionPath())
-              .document(); //userID);
-          final Map map = user.toMap();
-          map[UserField.createdAt] = FieldValue.serverTimestamp();
-          tr.set(doc, map);
+      //新しいUserを書き込み
+      final doc =
+          Firestore.instance.collection(getCollectionPath()).document(uid);
+      map = user.toMap();
+      map[UserField.createdAt] = FieldValue.serverTimestamp();
+      map[UserField.updatedAt] = FieldValue.serverTimestamp();
+      tr.set(doc, map);
+    }).then((_) {
+      //完了
+      completer.complete(UserDocument(uid, User.fromMap(map)));
+    }).catchError((err) {
+      //失敗
+      completer.completeError(err.toString());
+    });
 
-          //完了
-          completer.complete(UserDocument(doc.documentID, User.fromMap(map)));
-        } else {
-          //失敗
-          completer.completeError('表示名が重複しています');
-        }
-      });
-    } catch (e) {
-      //失敗（例外）
-      debugPrint('UserDatastore.addUser()で例外 ' + e.toString());
-      completer.completeError(e.toString());
-    }
     return completer.future;
   }
 
@@ -77,8 +71,8 @@ class UserDatastore {
 
           //同じdisplayNameの無いときだけ書き込みを行う
           final Map map = userDoc.data.toMap();
-          //作成日は変更しないので削除しておく
-          map.remove(UserField.createdAt);
+          map.remove(UserField.createdAt); //作成日は変更しないので削除しておく
+          map[UserField.updatedAt] = FieldValue.serverTimestamp();
           tr.update(doc, map);
 
           completer.complete(UserDocument(userDoc.docId, User.fromMap(map)));
@@ -95,12 +89,12 @@ class UserDatastore {
 
   // userを取得する
   // userIDが存在しない場合はnullを返す
-  static Future<UserDocument> getUser(String userID) async {
+  static Future<UserDocument> getUser(String uid) async {
     DocumentSnapshot snapshot;
     try {
-      snapshot =
-          await Firestore.instance.document(getDocumentPath(userID)).get();
+      snapshot = await Firestore.instance.document(getDocumentPath(uid)).get();
     } catch (e) {
+      // TODO
       // ※コレクションが存在しないとき、 .exists で返さず、多くの場合で OFFLINE 例外を
       // 発生してしまう。（ドキュメントでは.existsが正解）
       // https://cloud.google.com/firestore/docs/query-data/get-data?hl=ja
@@ -110,7 +104,7 @@ class UserDatastore {
     }
     return (!snapshot.exists)
         ? null
-        : new UserDocument(userID, User.fromMap(snapshot.data));
+        : new UserDocument(uid, User.fromMap(snapshot.data));
   }
 
   // displayNameからuserを取得する

@@ -153,7 +153,7 @@ class _SelectBasePictureState extends State<SelectBasePicture> {
             )),
         Expanded(
           flex: 2,
-          child: Text(basePictureDoc.basePicture.name),
+          child: Text(basePictureDoc.data.name),
         )
       ]),
       onTap: () {
@@ -193,7 +193,7 @@ class _SelectBasePictureState extends State<SelectBasePicture> {
   //ベース写真がタップされた
   void _handleSelectedBasePicture(BasePictureDocument basePictureDoc) async {
     //ベース写真をホールド編集に渡す
-    final url = basePictureDoc.basePicture.pictureURL;
+    final url = basePictureDoc.data.pictureURL;
     Navigator.of(context).pushNamed('/edit_problem/edit_holds',
         arguments: EditHoldsArgs(url, null));
   }

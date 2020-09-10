@@ -29,15 +29,16 @@ class MyDialog {
       String hintText = '',
       String initialText = '',
       bool multipleLines = false,
-      okButtonCaption = 'OK',
-      cancelButtonCaption = 'キャンセル',
+      String okButtonCaption = 'OK',
+      String cancelButtonCaption = 'キャンセル',
       int minTextLength = 0,
       int maxTextLength = 1000,
-      bool trimText = false}) async {
+      bool trimText = false,
+      bool dismissible = true}) async {
     final textEdit = TextEditingController();
     textEdit.text = initialText;
     final result = await showDialog(
-      barrierDismissible: true,
+      barrierDismissible: dismissible,
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -85,10 +86,11 @@ class MyDialog {
   static Future<MyDialogResult> selectYesNo(BuildContext context,
       {String caption = '',
       String labelText = '',
-      yesButtonCaption = 'はい',
-      noButtonCaption = 'いいえ'}) async {
+      String yesButtonCaption = 'はい',
+      String noButtonCaption = 'いいえ',
+      bool dismissible = true}) async {
     final result = await showDialog(
-      barrierDismissible: true,
+      barrierDismissible: dismissible,
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -119,9 +121,10 @@ class MyDialog {
       {Icon icon,
       String caption = '',
       String labelText = '',
-      okButtonCaption = 'OK'}) async {
+      String okButtonCaption = 'OK',
+      bool dismissible = true}) async {
     final result = await showDialog(
-      barrierDismissible: true,
+      barrierDismissible: dismissible,
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -152,7 +155,8 @@ class MyDialog {
       BuildContext context, setState, List<MyDialogItem> items,
       {String caption = '',
       String label = '',
-      cancelButtonCaption = 'キャンセル'}) async {
+      String cancelButtonCaption = 'キャンセル',
+      bool dismissible = true}) async {
     var itemWidgets = <Widget>[
       if (label.length > 0)
         Padding(padding: const EdgeInsets.all(16), child: Text(label))
@@ -176,7 +180,7 @@ class MyDialog {
     }
 
     final MyDialogIntResult result = await showDialog(
-      barrierDismissible: true,
+      barrierDismissible: dismissible,
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -247,7 +251,16 @@ class MyDialog {
 
   static successfulSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
       {int displaySeconds = 10}) {
-    scaffoldKey.currentState.showSnackBar(SnackBar(
+    if (scaffoldKey.currentState == null)
+      throw 'successfulSnackBar() scaffoldKey.currentStateがnullのため、スナックバーは表示されません！';
+    else
+      scaffoldKey.currentState.showSnackBar(
+          successfulSnackBarWidget(text, displaySeconds: displaySeconds));
+  }
+
+  static Widget successfulSnackBarWidget(String text,
+      {int displaySeconds = 10}) {
+    return SnackBar(
       content: Row(children: <Widget>[
         Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -259,60 +272,70 @@ class MyDialog {
         label: 'OK',
         onPressed: () {},
       ),
-    ));
+    );
   }
 
   static informationSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
       {int displaySeconds = 10}) {
-    scaffoldKey.currentState.showSnackBar(SnackBar(
-      content: Row(children: <Widget>[
-        Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: Icon(Icons.info_outline, color: Colors.blueAccent)),
-        Expanded(child: Text(text))
-      ]),
-      duration: Duration(seconds: displaySeconds),
-      action: SnackBarAction(
-        label: 'OK',
-        onPressed: () {},
-      ),
-    ));
+    if (scaffoldKey.currentState == null)
+      throw 'informationSnackBar() scaffoldKey.currentStateがnullのため、スナックバーは表示されません！';
+    else
+      scaffoldKey.currentState.showSnackBar(SnackBar(
+        content: Row(children: <Widget>[
+          Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Icon(Icons.info_outline, color: Colors.blueAccent)),
+          Expanded(child: Text(text))
+        ]),
+        duration: Duration(seconds: displaySeconds),
+        action: SnackBarAction(
+          label: 'OK',
+          onPressed: () {},
+        ),
+      ));
   }
 
   static hintSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
       {int displaySeconds = 10}) {
-    scaffoldKey.currentState.showSnackBar(SnackBar(
-      content: Row(children: <Widget>[
-        Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: Icon(Icons.lightbulb_outline, color: Colors.yellow)),
-        Expanded(child: Text(text))
-      ]),
-      duration: Duration(seconds: displaySeconds),
-      action: SnackBarAction(
-        label: 'OK',
-        onPressed: () {},
-      ),
-    ));
+    if (scaffoldKey.currentState == null)
+      throw 'hintSnackBar() scaffoldKey.currentStateがnullのため、スナックバーは表示されません！';
+    else
+      scaffoldKey.currentState.showSnackBar(SnackBar(
+        content: Row(children: <Widget>[
+          Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Icon(Icons.lightbulb_outline, color: Colors.yellow)),
+          Expanded(child: Text(text))
+        ]),
+        duration: Duration(seconds: displaySeconds),
+        action: SnackBarAction(
+          label: 'OK',
+          onPressed: () {},
+        ),
+      ));
   }
 
   static errorSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
       {int displaySeconds = 10}) {
-    scaffoldKey.currentState.showSnackBar(SnackBar(
-      content: Row(children: <Widget>[
-        Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-            child: Icon(
-              Icons.error,
-              color: Colors.redAccent,
-            )),
-        Expanded(child: Text(text))
-      ]),
-      duration: Duration(seconds: displaySeconds),
-      action: SnackBarAction(
-        label: 'OK',
-        onPressed: () {},
-      ),
-    ));
+    if (scaffoldKey.currentState == null)
+      throw 'errorSnackBar() scaffoldKey.currentStateがnullのため、スナックバーは表示されません！';
+    else
+      scaffoldKey.currentState.showSnackBar(SnackBar(
+        content: Row(children: <Widget>[
+          Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+              child: Icon(
+                Icons.error,
+                color: Colors.redAccent,
+              )),
+          Expanded(child: Text(text))
+        ]),
+        duration: Duration(seconds: displaySeconds),
+        action: SnackBarAction(
+          label: 'OK',
+          onPressed: () {},
+        ),
+      ));
   }
 }

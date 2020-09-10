@@ -10,14 +10,6 @@ import 'dart:async';
 
 //basePictureコレクションを扱うツール
 class BasePictureDatastore {
-  /*Functionsで処理に変更
-
-  //ベース写真の大きさ(ここは定義のみ)
-  //アップロード時にUI側で調整
-  static const double BASE_PICTURE_MAX_WIDTH = 1200;
-  static const double BASE_PICTURE_MAX_HEIGHT = 1200;
-  */
-
   //Firestoreのコレクション名を返す
   static String getCollectionPath() {
     return "basePictures";
@@ -29,24 +21,14 @@ class BasePictureDatastore {
   }
 
   //ドキュメントを追加する
-  //成功時にDocumentIDを返す
-  static Future<String> addBasePicture(
-      String originalPath,
-      int rotation,
-      double trimLeft,
-      double trimTop,
-      double trimRight,
-      double trimBottom,
-      String name,
-      String userID) async {
-    var completer = new Completer<String>();
+  //成功時にBasePictureDocumentを返す
+  static Future<BasePictureDocument> addBasePicture(
+      BasePicture basePicture) async {
+    var completer = new Completer<BasePictureDocument>();
     try {
       //BasePictureクラスを生成
-      var map = BasePicture(originalPath, rotation, trimLeft, trimTop,
-              trimRight, trimBottom, name, userID)
-          .toMap();
-      //作成日を追加する
-      map[BasePictureField.createdAt] = FieldValue.serverTimestamp();
+      var map = basePicture.toMap();
+      map[BasePictureField.createdAt] = FieldValue.serverTimestamp(); //作成日を追加する
       final newDoc =
           Firestore.instance.collection(getCollectionPath()).document();
 
@@ -54,7 +36,8 @@ class BasePictureDatastore {
       await newDoc.setData(map);
 
       debugPrint("追加されたベース写真 documentID = " + newDoc.documentID);
-      completer.complete(newDoc.documentID);
+      completer.complete(
+          BasePictureDocument(newDoc.documentID, BasePicture.fromMap(map)));
     } catch (e) {
       completer.completeError(e.toString());
     }
@@ -62,29 +45,19 @@ class BasePictureDatastore {
     return completer.future;
   }
 
-/*
-  static void addBasePictureT(
-      Transaction transaction, BasePicture basePicture) {
-    final Map map = basePicture.toMap();
-    //作成日を追加する
-    map[BasePictureField.createdAt] = FieldValue.serverTimestamp();
-    transaction.set(
-        Firestore.instance.collection(getCollectionPath()).document(), map);
-  }
-*/
   //basePictureを更新する
   //成功時にtrue、失敗でnull
   static Future<bool> updateBasePicture(
-      String documentID, BasePicture basePicture) async {
+      BasePictureDocument basePictureDoc) async {
     var completer = new Completer<bool>();
-    final Map map = basePicture.toMap();
+    final Map map = basePictureDoc.data.toMap();
 
     //更新日を削除する
     map.remove(BasePictureField.createdAt);
 
     //Firestoreのデータをアップデート
     Firestore.instance
-        .document(getDocumentPath(documentID))
+        .document(getDocumentPath(basePictureDoc.docId))
         .updateData(map)
         .then((_) {
       completer.complete(true);
@@ -95,27 +68,6 @@ class BasePictureDatastore {
     });
     return completer.future;
   }
-/*  static Future<DatastoreResult> updateBasePicture(
-      String documentID, BasePicture basePicture) async {
-    var completer = new Completer<DatastoreResult>();
-    final Map map = basePicture.toMap();
-
-    //更新日を削除する
-    map.remove(BasePictureField.createdAt);
-
-    //Firestoreのデータをアップデート
-    Firestore.instance
-        .document(getDocumentPath(documentID))
-        .updateData(map)
-        .then((_) {
-      completer.complete(DatastoreResult(true));
-      debugPrint("update成功");
-    }).catchError((err) {
-      completer.complete(DatastoreResult(false, errorMessage: err.toString()));
-      debugPrint("update失敗 " + err.toString());
-    });
-    return completer.future;
-  }*/
 
   //basePictureを取得する
   //存在しない場合はnullを返す
@@ -134,22 +86,6 @@ class BasePictureDatastore {
     return Firestore.instance.document(getDocumentPath(documentID)).snapshots();
   }
 
-  /*
-  //basePicture[]を取得する
-  //存在しない場合はnullではなく[]を返す
-  static Future<List<BasePictureDocument>> getBasePictures() async {
-    final snapshot =
-        await Firestore.instance.collection(getCollectionPath()).getDocuments();
-    var basePictureDocs = <BasePictureDocument>[];
-    snapshot.documents.forEach((element) {
-      if (element.exists) {
-        basePictureDocs.add(new BasePictureDocument(
-            element.documentID, BasePicture.fromMap(element.data)));
-      }
-    });
-    return basePictureDocs;
-  }
-*/
   //StreamBuilder用
   static Stream<QuerySnapshot> getBasePicturesStream(
       {String orderBy = BasePictureField.createdAt, bool descending = true}) {
@@ -164,16 +100,6 @@ class BasePictureDatastore {
     return Firestore.instance.document(getDocumentPath(documentID)).snapshots();
   }
 
-  /*static Stream<DocumentSnapshot> getBasePictureStream(String documentID) {
-    return Firestore.instance.document(getDocumentPath(documentID)).snapshots();
-  }*/
-  /*static Future<BasePicture> getBasePictureT(Transaction transaction,
-      String documentID) async {
-    final snapshot = await transaction
-        .get(Firestore.instance.document(getDocumentPath(documentID)));
-    return snapshot.exists ? BasePicture.fromMap(snapshot.data) : null;
-  }*/
-
   //basePictureを削除する
   //成功でtrue,失敗でnull
   static Future<bool> deleteBasePicture(String documentID) async {
@@ -181,7 +107,7 @@ class BasePictureDatastore {
 
     try {
       final basePictureDoc = await getBasePicture(documentID);
-      final filePath = basePictureDoc.basePicture.picturePath;
+      final filePath = basePictureDoc.data.picturePath;
       await Firestore.instance.document(getDocumentPath(documentID)).delete();
       await BasePictureStorage.delete(filePath);
       completer.complete(true);
@@ -190,27 +116,8 @@ class BasePictureDatastore {
       completer.completeError(e.toString());
       debugPrint("delete失敗 " + e.toString());
     }
-    /*Firestore.instance.document(getDocumentPath(documentID)).delete().then((_) {
-      completer.complete(true);
-      debugPrint("delete成功");
-    }).catchError((err) {
-      completer.completeError(err.toString());
-      debugPrint("delete失敗 " + err.toString());
-    });*/
     return completer.future;
   }
-/*  static Future<DatastoreResult> deleteBasePicture(String documentID) async {
-    var completer = new Completer<DatastoreResult>();
-    Firestore.instance.document(getDocumentPath(documentID)).delete().then((_) {
-      completer.complete(DatastoreResult(true));
-      debugPrint("delete成功");
-    }).catchError((err) {
-      completer.complete(DatastoreResult(false, errorMessage: err.toString()));
-      debugPrint("delete失敗 " + err.toString());
-    });
-    return completer.future;
-  }*/
-
 }
 
 //Firebase storage内のベース写真を扱う
