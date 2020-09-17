@@ -8,11 +8,13 @@ import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user_datastore.dart';
 import 'package:pono_problem_app/records/user_ref.dart';
 import 'package:pono_problem_app/records/user_ref_datastore.dart';
+import 'package:pono_problem_app/routes/home_route.dart';
 import 'package:pono_problem_app/routes/trimming_image_route.dart';
 import 'package:pono_problem_app/utils/formatter.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/my_widget.dart';
 import '../globals.dart';
+import 'home_footer.dart';
 
 //このrouteにpushする場合に渡すパラメータ
 class EditAccountArgs {
@@ -152,9 +154,10 @@ class _EditAccountState extends State<EditAccount> {
       //    (_arguments.newAccount) ? 'ユーザーアカウントを作成しました。' : 'ユーザーアカウントを更新しました。');
       //Navigator.of(context).popUntil(ModalRoute.withName("/"));
 
-      final snackBar = MyDialog.successfulSnackBarWidget(
+      //Homeに戻ったときに表示するスナックバーを渡す
+      HomeFooter.snackBarWidgetFromOutside = MyWidget.successfulSnackBar(
           (_arguments.newAccount) ? 'ユーザーアカウントを作成しました。' : 'ユーザーアカウントを更新しました。');
-      Navigator.of(context).pop(snackBar);
+      Navigator.of(context).pop();
     });
   }
 
@@ -264,7 +267,7 @@ class _EditAccountState extends State<EditAccount> {
     }
 
     //上記メニューから操作を選択
-    final selectResult = await MyDialog.selectItem(context, setState, items,
+    final selectResult = await MyDialog.selectItem(context, items,
         caption: UserFieldCaption.iconURL, label: 'どこから取得しますか？');
     if (selectResult == null || selectResult.result != MyDialogResult.OK)
       return;
@@ -283,7 +286,7 @@ class _EditAccountState extends State<EditAccount> {
       //トリミング
       final trimResult = await Navigator.of(context).pushNamed(
               '/edit_problem/trimming_image',
-              arguments: TrimmingImageArgs(null, pickedFile.path))
+              arguments: TrimmingImageArgs(filePath: pickedFile.path))
           as TrimmingResult;
       if (trimResult == null) {
         File(pickedFile.path).deleteSync();

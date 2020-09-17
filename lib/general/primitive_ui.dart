@@ -20,7 +20,7 @@ class PrimitiveUI extends Primitive {
       : super(p.type, p.position, p.sizeType, p.color,
             subItemPosition: p.subItemPosition);
 
-  final _dimensions = {
+  static final _dimensions = {
     PrimitiveSizeType.XS: {'radius': 20.0, 'width': 4.0},
     PrimitiveSizeType.S: {'radius': 30.0, 'width': 4.0},
     PrimitiveSizeType.M: {'radius': 40.0, 'width': 4.0},
@@ -28,7 +28,7 @@ class PrimitiveUI extends Primitive {
     PrimitiveSizeType.XL: {'radius': 60.0, 'width': 4.0},
   };
 
-  final _textInfo = {
+  static final _textInfo = {
     PrimitiveType.StartHold: {'text': 'Ｓ', 'fontSize': 60.0},
     PrimitiveType.StartHold_Hand: {'text': '手', 'fontSize': 60.0},
     PrimitiveType.StartHold_Foot: {'text': '足', 'fontSize': 60.0},
@@ -94,7 +94,7 @@ class PrimitiveUI extends Primitive {
           drawPos.dy - textPainter.height / 2.0);
       textPainter.paint(canvas, leftTop);
 
-      //線を引く
+      //線を引く準備
       Offset p1, p2;
       switch (subItemPosition) {
         case PrimitiveSubItemPosition.Center:

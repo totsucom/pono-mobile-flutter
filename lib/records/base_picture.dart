@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:pono_problem_app/globals.dart';
 import 'package:pono_problem_app/utils/conv.dart';
 
@@ -21,12 +22,13 @@ class BasePicture {
   String thumbnailURL;
 
   String name;
+  List<String> wallIDs;
   String uid;
   DateTime createdAt;
 
   // コンストラクタ
   BasePicture(this.originalPath, this.rotation, this.trimLeft, this.trimTop,
-      this.trimRight, this.trimBottom, this.name,
+      this.trimRight, this.trimBottom, this.name, this.wallIDs, this.uid,
       {this.picturePath = '', this.pictureURL = '', this.thumbnailURL = ''}) {
     assert(this.rotation == 0 ||
         this.rotation == 90 ||
@@ -36,7 +38,6 @@ class BasePicture {
     assert(this.trimTop >= 0.0 && this.trimTop <= 1.0);
     assert(this.trimRight >= 0.0 && this.trimRight <= 1.0);
     assert(this.trimBottom >= 0.0 && this.trimBottom <= 1.0);
-    this.uid = Globals.currentUserID;
     assert(this.uid != null);
   }
 
@@ -56,6 +57,11 @@ class BasePicture {
     this.pictureURL = map[BasePictureField.pictureURL] ?? '';
     this.picturePath = map[BasePictureField.picturePath] ?? '';
     this.thumbnailURL = map[BasePictureField.thumbnailURL] ?? '';
+    this.wallIDs = (map[BasePictureField.wallIDs] == null)
+        ? <String>[]
+        : (map[BasePictureField.wallIDs] as List)
+            .map((e) => e.toString())
+            .toList();
     this.uid = map[BasePictureField.uid] ?? '';
 
     // DartのDateに変換
@@ -79,6 +85,7 @@ class BasePicture {
       BasePictureField.pictureURL: this.pictureURL,
       BasePictureField.picturePath: this.picturePath,
       BasePictureField.thumbnailURL: this.thumbnailURL,
+      BasePictureField.wallIDs: this.wallIDs,
       BasePictureField.uid: this.uid,
       BasePictureField.createdAt: this.createdAt, // Dateはそのまま渡せる
     };
@@ -98,6 +105,7 @@ class BasePictureField {
   static const pictureURL = "pictureURL";
   static const picturePath = "picturePath";
   static const thumbnailURL = "thumbnailURL";
+  static const wallIDs = "wallIDs";
   static const uid = "uid";
   static const createdAt = "createdAt";
 }
@@ -108,6 +116,7 @@ class BasePictureFieldCaption {
   static const pictureURL = "ベース写真";
   static const picturePath = "ベース写真";
   static const thumbnailURL = "サムネイル";
+  static const wallIDs = "壁";
   static const uid = "登録者";
   static const createdAt = "登録日";
 }

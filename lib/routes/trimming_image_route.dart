@@ -6,10 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as UI;
-import 'package:pono_problem_app/general/trimming_painter.dart';
+import 'package:pono_problem_app/general/trimming_image_painter.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/my_widget.dart';
 import 'package:image/image.dart' as image;
+import 'package:provider/provider.dart';
+
+import '../my_auth_notifier.dart';
 
 //MyPainterクラスからウィジェットの大きさを取得するために使用する
 GlobalKey _toolBarGlobalKey = GlobalKey();
@@ -18,33 +21,42 @@ GlobalKey _toolBarGlobalKey = GlobalKey();
 class TrimmingImageArgs {
   final String imageURL;
   final String filePath;
-  final String title;
-  final double initTrimLeft, initTrimTop, initTrimRight, initTrimBottom;
-  final bool enableRotation;
-  List<UI.Image> _cachedImage; //描画毎に無限ダウンロードしてしまうので、キャッシュは必須
+  final image.Image imImage;
 
-  //コンストラクタにはimageURLまたはfilePathの、いずれかのパラメータを渡す
+  final String title;
+  final double initTrimLeft,
+      initTrimTop,
+      initTrimRight,
+      initTrimBottom; //0.0-1.0 それぞれからのエッジからの距離
+  final bool enableRotation;
+  //List<UI.Image> _cachedImage; //描画毎に無限ダウンロードしてしまうので、キャッシュは必須
+
+  //コンストラクタにはimageURL、filePathまたはuiImageの、いずれかのパラメータを渡す
   //使用しない方にはnullを設定する
-  TrimmingImageArgs(this.imageURL, this.filePath,
-      {this.title = 'トリミング',
+  TrimmingImageArgs(
+      {this.imageURL,
+      this.filePath,
+      this.imImage,
+      this.title = 'トリミング',
       this.initTrimLeft = 0.0,
       this.initTrimTop = 0.0,
       this.initTrimRight = 0.0,
       this.initTrimBottom = 0.0,
       this.enableRotation = true}) {
-    if (imageURL == null && filePath == null) {
+    if (imageURL == null && filePath == null && imImage == null) {
       throw Exception('TrimmingImageArgsにイメージを渡す必要があります');
     }
   }
 
   //UI上の処理だけなので、動作を軽るするのに長辺をMAX_SIZEに縮小する
-  static List<List<int>> bytesToImageBytes(Uint8List bytes) {
+  static List<List<int>> _prepareImages(
+      image.Image baseSizeImage /*Uint8List bytes*/) {
     const MAX_SIZE = 480;
 
     //Image package を使用
 
     //Imageインスタンスを作成
-    image.Image baseSizeImage = image.decodeImage(bytes);
+    //image.Image baseSizeImage = image.decodeImage(bytes);
 
     //長辺に合わせてリサイズ
     image.Image resizeImage;
@@ -68,48 +80,50 @@ class TrimmingImageArgs {
     //return image.encodeJpg(resizeImage);
   }
 
-  //イメージをダウンロードするためにFutureBuilderで使用する
-  Future<List<UI.Image>> getImageFutureBuilder() async {
+  //イメージをダウンロードして加工するためにFutureBuilderで使用する
+  Future<List<UI.Image>> getProcessedImagesFuture() async {
     var completer = new Completer<List<UI.Image>>();
-    if (_cachedImage != null) {
-      completer.complete(_cachedImage);
+
+    //パラメータに応じて、元画像データをbyte配列化
+    image.Image img;
+    if (imageURL != null && imageURL.length > 0) {
+      try {
+        final bundle =
+            await NetworkAssetBundle(Uri.parse(imageURL)).load(imageURL);
+        final bytes = bundle.buffer.asUint8List();
+        img = image.decodeImage(bytes);
+      } catch (e) {
+        completer.completeError(e);
+      }
+    } else if (filePath != null && filePath.length > 0) {
+      try {
+        final bytes = await File(filePath).readAsBytes();
+        img = image.decodeImage(bytes);
+      } catch (e) {
+        completer.completeError(e);
+      }
+    } else if (imImage != null) {
+      img = imImage;
     } else {
-      if (imageURL != null) {
-        try {
-          final bundle =
-              await NetworkAssetBundle(Uri.parse(imageURL)).load(imageURL);
-          Uint8List bytes = bundle.buffer.asUint8List();
-          //この関数は重くUIが止まってしまうので、非同期で実行
-          List<List<int>> newBytes = await compute(bytesToImageBytes, bytes);
-          _cachedImage = <UI.Image>[
-            await decodeImageFromList(newBytes[0]),
-            await decodeImageFromList(newBytes[1]),
-            await decodeImageFromList(newBytes[2]),
-            await decodeImageFromList(newBytes[3])
-          ];
-          debugPrint("イメージをダウンロードしました");
-          completer.complete(_cachedImage);
-        } catch (e) {
-          completer.completeError(e);
-        }
-      } else if (filePath != null) {
-        try {
-          Uint8List bytes = await File(filePath).readAsBytes();
-          //この関数は重くUIが止まってしまうので、非同期で実行
-          List<List<int>> newBytes = await compute(bytesToImageBytes, bytes);
-          _cachedImage = <UI.Image>[
-            await decodeImageFromList(newBytes[0]),
-            await decodeImageFromList(newBytes[1]),
-            await decodeImageFromList(newBytes[2]),
-            await decodeImageFromList(newBytes[3])
-          ];
-          debugPrint("イメージを読み込みました");
-          completer.complete(_cachedImage);
-        } catch (e) {
-          completer.completeError(e);
-        }
-      } else {
-        completer.completeError('TrimmingImageArgs()にパラメータが設定されていません');
+      completer.completeError('TrimmingImageArgs()にパラメータが設定されていません');
+    }
+
+    if (img != null) {
+      try {
+        //この関数は重くUIが止まってしまうので、非同期で実行
+        //先に90度ずつ回転させた画像を生成
+
+        List<List<int>> newBytes = await compute(_prepareImages, img);
+        final images = <UI.Image>[
+          await decodeImageFromList(newBytes[0]),
+          await decodeImageFromList(newBytes[1]),
+          await decodeImageFromList(newBytes[2]),
+          await decodeImageFromList(newBytes[3])
+        ];
+        completer.complete(images);
+        debugPrint('トリミング用画像の準備が整いました');
+      } catch (e) {
+        completer.completeError(e);
       }
     }
     return completer.future;
@@ -123,8 +137,8 @@ class TrimmingResult {
   final String filePath;
 
   //処理結果
-  final int rotation;
-  final double trimLeft, trimTop, trimRight, trimBottom;
+  final int rotation; //0,90,180,270 (Exif情報のOrientation値は含まない)
+  final double trimLeft, trimTop, trimRight, trimBottom; //0.0-1.0 各エッジからの距離
 
   TrimmingResult(this.imageURL, this.filePath, this.rotation, this.trimLeft,
       this.trimTop, this.trimRight, this.trimBottom);
@@ -141,8 +155,10 @@ class _TrimmingImageState extends State<TrimmingImage> {
   //前画面から渡されたパラメータを保持
   TrimmingImageArgs _arguments;
 
+  Future<List<UI.Image>> _processedImagesFuture;
+
   //MyPainterクラスに渡す、描画パラメータを保持
-  TrimmingPainter _paintArgs;
+  TrimmingImagePainter _paintArgs;
 
   //SnackBar表示用
   var _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -161,21 +177,59 @@ class _TrimmingImageState extends State<TrimmingImage> {
   @override
   Widget build(BuildContext context) {
     if (_paintArgs == null) {
-      _paintArgs =
-          TrimmingPainter(Theme.of(context).primaryColor, Colors.purpleAccent);
+      _paintArgs = TrimmingImagePainter(
+          Theme.of(context).primaryColor, Colors.purpleAccent);
     }
 
     if (_arguments == null) {
       //前画面から渡されたパラメータを読み込む(initState()内ではエラーになる)
       _arguments = ModalRoute.of(context).settings.arguments;
       if (_arguments == null) {
-        throw Exception('trimming_image_routeにTrimmingImageArgsクラスを渡してください');
+        throw 'trimming_image_routeにTrimmingImageArgsクラスを渡してください';
       } else {
         _paintArgs.trimLeft = _arguments.initTrimLeft;
         _paintArgs.trimTop = _arguments.initTrimTop;
         _paintArgs.trimRight = _arguments.initTrimRight;
         _paintArgs.trimBottom = _arguments.initTrimBottom;
+
+        //ベース画像の取得を開始する
+        _processedImagesFuture = _arguments.getProcessedImagesFuture();
+        debugPrint('トリミングイメージの準備を開始します。');
       }
+    }
+
+    //認証情報を得る
+    final auth = Provider.of<MyAuthNotifier>(context, listen: false);
+    String errMsg;
+    switch (auth.reason) {
+      case MyAuthNotifyReason.FBUserLost:
+        errMsg = '認証ユーザーが失われました';
+        break;
+      case MyAuthNotifyReason.FBUserChanged:
+        errMsg = '認証ユーザーが変更されました';
+        break;
+      case MyAuthNotifyReason.UserDeleted:
+        errMsg = 'ユーザーが削除されました';
+        break;
+      default:
+        //念のため
+        if (auth.firebaseUser == null) {
+          errMsg = '認証ユーザーが失われました';
+          break;
+        } else if (auth.currentUser == null) {
+          errMsg = '認証ユーザーが削除されました';
+          break;
+        }
+    }
+    auth.resetReason();
+    if (errMsg != null) {
+      // エラーがのでダイアログ表示後にホームに戻す
+      Future.delayed(Duration.zero).then((_) async {
+        await MyDialog.ok(context,
+            caption: 'エラー', labelText: errMsg, dismissible: false);
+        Navigator.of(context).popUntil(ModalRoute.withName("/"));
+      });
+      return MyWidget.empty(context, scaffold: true);
     }
 
     return WillPopScope(
@@ -196,12 +250,13 @@ class _TrimmingImageState extends State<TrimmingImage> {
           ),
           body: FutureBuilder(
               //イメージのダウンロードを待つ
-              future: _arguments.getImageFutureBuilder(),
+              future: _processedImagesFuture,
               builder: (BuildContext context, future) {
                 if (future == null || (!future.hasData && !future.hasError))
                   return MyWidget.loading(context);
                 if (future.hasError)
-                  return MyWidget.error(context, future.error.toString());
+                  return MyWidget.error(context,
+                      detail: future.error.toString());
 
                 if (_paintArgs.images == null) {
                   //ダウンロードしたイメージを描画クラスに渡す
@@ -292,7 +347,7 @@ class _TrimmingImageState extends State<TrimmingImage> {
         _arguments.imageURL, //元画像(ネットワークイメージの場合)
         _arguments.filePath, //元画像(ローカルファイルの場合)
         _paintArgs.rotation, //画像の回転角(0,90,180,270度) このほかに元画像がExifを持っていることがある
-        _paintArgs.trimLeft, //トリミング結果 0.0～1.0
+        _paintArgs.trimLeft, //トリミング結果 0.0～1.0。各エッジからの距離
         _paintArgs.trimTop,
         _paintArgs.trimRight,
         _paintArgs.trimBottom));
@@ -392,7 +447,7 @@ class _TrimmingImageState extends State<TrimmingImage> {
 }
 
 class MyTrimmingPainter extends CustomPainter {
-  final TrimmingPainter _paintArgs;
+  final TrimmingImagePainter _paintArgs;
 
   MyTrimmingPainter(this._paintArgs);
 

@@ -88,7 +88,7 @@ class UserDatastore {
   }
 
   // userを取得する
-  // userIDが存在しない場合はnullを返す
+  // exception=false の場合は例外時にnullを返す
   static Future<UserDocument> getUser(String uid) async {
     DocumentSnapshot snapshot;
     try {

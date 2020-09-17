@@ -7,6 +7,7 @@ import './base_picture.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pono_problem_app/utils/content_type.dart';
 import 'dart:async';
+import 'dart:ui' as UI;
 
 //basePictureコレクションを扱うツール
 class BasePictureDatastore {
@@ -22,8 +23,9 @@ class BasePictureDatastore {
 
   //ドキュメントを追加する
   //成功時にBasePictureDocumentを返す
+  //exception=false の場合は例外時にnullを返す
   static Future<BasePictureDocument> addBasePicture(
-      BasePicture basePicture) async {
+      BasePicture basePicture, bool exception) async {
     var completer = new Completer<BasePictureDocument>();
     try {
       //BasePictureクラスを生成
@@ -39,44 +41,61 @@ class BasePictureDatastore {
       completer.complete(
           BasePictureDocument(newDoc.documentID, BasePicture.fromMap(map)));
     } catch (e) {
-      completer.completeError(e.toString());
+      if (exception)
+        completer.completeError(e.toString());
+      else
+        completer.complete(null);
     }
-
     return completer.future;
   }
 
   //basePictureを更新する
-  //成功時にtrue、失敗でnull
+  //成功時にtrueを返す
+  //exception=false の場合は例外時にnullを返す
   static Future<bool> updateBasePicture(
-      BasePictureDocument basePictureDoc) async {
+      BasePictureDocument basePictureDoc, bool exception) async {
     var completer = new Completer<bool>();
-    final Map map = basePictureDoc.data.toMap();
+    try {
+      final Map map = basePictureDoc.data.toMap();
 
-    //更新日を削除する
-    map.remove(BasePictureField.createdAt);
+      //作成日を削除する
+      map.remove(BasePictureField.createdAt);
 
-    //Firestoreのデータをアップデート
-    Firestore.instance
-        .document(getDocumentPath(basePictureDoc.docId))
-        .updateData(map)
-        .then((_) {
+      //Firestoreのデータをアップデート
+      await Firestore.instance
+          .document(getDocumentPath(basePictureDoc.docId))
+          .updateData(map);
       completer.complete(true);
       debugPrint("update成功");
-    }).catchError((err) {
-      completer.completeError(err.toString());
-      debugPrint("update失敗 " + err.toString());
-    });
+    } catch (e) {
+      if (exception)
+        completer.completeError(e.toString());
+      else
+        completer.complete(null);
+      debugPrint("update失敗 " + e.toString());
+    }
     return completer.future;
   }
 
   //basePictureを取得する
   //存在しない場合はnullを返す
-  static Future<BasePictureDocument> getBasePicture(String documentID) async {
-    final snapshot =
-        await Firestore.instance.document(getDocumentPath(documentID)).get();
-    if (!snapshot.exists) return null;
-    return BasePictureDocument(
-        snapshot.documentID, BasePicture.fromMap(snapshot.data));
+  //exception=false の場合は例外時にもnullを返す
+  static Future<BasePictureDocument> getBasePicture(
+      String documentID, bool exception) async {
+    var completer = new Completer<BasePictureDocument>();
+    try {
+      final snapshot =
+          await Firestore.instance.document(getDocumentPath(documentID)).get();
+      if (!snapshot.exists) return null;
+      return BasePictureDocument(
+          snapshot.documentID, BasePicture.fromMap(snapshot.data));
+    } catch (e) {
+      if (exception)
+        completer.completeError(e.toString());
+      else
+        completer.complete(null);
+    }
+    return completer.future;
   }
 
   //getBasePictureを監視(listen)するためのスナップショットを返す
@@ -101,19 +120,23 @@ class BasePictureDatastore {
   }
 
   //basePictureを削除する
-  //成功でtrue,失敗でnull
-  static Future<bool> deleteBasePicture(String documentID) async {
+  //成功時にtrueを返す
+  //exception=false の場合は例外時にもnullを返す
+  static Future<bool> deleteBasePicture(
+      String documentID, bool exception) async {
     var completer = new Completer<bool>();
-
     try {
-      final basePictureDoc = await getBasePicture(documentID);
+      final basePictureDoc = await getBasePicture(documentID, true);
       final filePath = basePictureDoc.data.picturePath;
       await Firestore.instance.document(getDocumentPath(documentID)).delete();
-      await BasePictureStorage.delete(filePath);
+      await BasePictureStorage.delete(filePath, true);
       completer.complete(true);
       debugPrint("delete成功");
     } catch (e) {
-      completer.completeError(e.toString());
+      if (exception)
+        completer.completeError(e.toString());
+      else
+        completer.complete(null);
       debugPrint("delete失敗 " + e.toString());
     }
     return completer.future;
@@ -128,7 +151,8 @@ class BasePictureStorage {
   }
 
   //アップロード
-  static Future<StorageResult> upload(String localPath) async {
+  //exception=false の場合は例外時にnullを返す
+  static Future<StorageResult> upload(String localPath, bool exception) async {
     var completer = new Completer<StorageResult>();
     try {
       final storagePath = getFolderPath() + '/' + Unique.FileName(localPath);
@@ -141,24 +165,35 @@ class BasePictureStorage {
       completer.complete(StorageResult(path: storagePath, url: downloadURL));
       debugPrint("upload成功 " + storagePath + " " + downloadURL);
     } catch (e) {
-      completer.completeError(e.toString());
+      if (exception)
+        completer.completeError(e.toString());
+      else
+        completer.complete(null);
       debugPrint("upload失敗 " + e.toString());
     }
     return completer.future;
   }
 
   //削除
-  static Future<bool> delete(String path) {
+  //exception=false の場合は例外時にnullを返す
+  static Future<bool> delete(String path, bool exception) {
     var completer = new Completer<bool>();
     if (!path.startsWith(getFolderPath())) {
-      completer.completeError('$pathは${BasePicture.baseName}ファイルではありません');
+      debugPrint('$pathは${BasePicture.baseName}ファイルではありません');
+      if (exception)
+        completer.completeError('$pathは${BasePicture.baseName}ファイルではありません');
+      else
+        completer.complete(null);
     } else {
       final StorageReference ref = FirebaseStorage().ref().child(path);
       ref.delete().then((value) {
         completer.complete(true);
         debugPrint('delete成功');
       }).catchError((err) {
-        completer.completeError(err);
+        if (exception)
+          completer.completeError(err);
+        else
+          completer.complete(null);
         debugPrint('delete失敗 ' + err.toString());
       });
     }

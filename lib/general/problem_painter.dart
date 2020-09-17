@@ -4,11 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:pono_problem_app/general/primitive_ui.dart';
 
+/* TODO
+*  updatedの代わりに ChangeNotifier, ChangeNotifierProvider を使うほうがスマートかも
+* https://flutter.dev/docs/development/data-and-backend/state-mgmt/simple
+* */
+
 class ProblemPainter {
   //抽象的な表示倍率の範囲
-  //1.0はベース写真の半分の高さを画面(Canvas)に収める大きさ
-  static const DISPLAY_SIZE_MIN = 0.3;
-  static const DISPLAY_SIZE_MAX = 1.5;
+  //1.0はベース写真がキャンバスに納まる倍率
+  static const DISPLAY_SIZE_MIN = 0.6;
+  static const DISPLAY_SIZE_MAX = 2.0;
+  static const DISPLAY_SIZE_DIV = 28;
 
   //利用可能かどうか
   bool get isReady => (this._baseImage != null);
@@ -37,7 +43,7 @@ class ProblemPainter {
 
   set baseImage(UI.Image newImage) {
     _baseImage = newImage;
-    baseImagePosition = Offset(newImage.width / 2.0, newImage.height / 2.0);
+    moveToCenter();
     _updated = true;
   }
 
@@ -51,15 +57,20 @@ class ProblemPainter {
     _baseImagePosition = newPos;
   }
 
+  void moveToCenter() {
+    baseImagePosition = Offset(_baseImage.width / 2.0, _baseImage.height / 2.0);
+    _updated = true;
+  }
+
   //抽象的な表示スケール
-  //1.0はベース写真の半分の高さを画面(Canvas)に収める大きさ
+  //1.0はベース写真がキャンバスにちょうど納まる大きさ
   double _displaySize = 1.0;
 
   double get displaySize => this._displaySize;
 
   set displaySize(double newSize) {
     assert(newSize >= DISPLAY_SIZE_MIN && newSize <= DISPLAY_SIZE_MAX);
-    _updated = (_displaySize != newSize);
+    if (_displaySize != newSize) _updated = true;
     _displaySize = newSize;
   }
 
@@ -138,15 +149,19 @@ class ProblemPainter {
 
     if (!this.isReady) return;
 
-    //描画エリア全体
+    //スケールを計算
+    final double scaleW = canvasSize.width / this.baseImage.width.toDouble();
+    final double scaleH = canvasSize.height / this.baseImage.height.toDouble();
+    this.actualScale = ((scaleW < scaleH) ? scaleW : scaleH) * this.displaySize;
+
+    //キャンバス上の描画エリア
     final canvasRect = Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height);
 
-    //ベース写真の描画エリア
-    final srcHeight = this.baseImage.height / (2.0 * this.displaySize);
-    final srcWidth = canvasSize.width / canvasSize.height * srcHeight;
+    //描画する、ベース写真上のエリア
+    final srcWidth = canvasRect.width / this.actualScale;
+    final srcHeight = canvasSize.height / this.actualScale;
     final srcX = this.baseImagePosition.dx - srcWidth / 2.0;
     final srcY = this.baseImagePosition.dy - srcHeight / 2.0;
-    final imageRect = Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height);
 
     // TODO
     //キャンバスと描画エリアの重なり具合から、背景色の塗りつぶし処理を低減する
@@ -158,8 +173,7 @@ class ProblemPainter {
 
     //ベース写真を表示
     canvas.drawImageRect(this.baseImage,
-        Rect.fromLTWH(srcX, srcY, srcWidth, srcHeight), imageRect, paint);
-    this.actualScale = canvasSize.width / srcWidth;
+        Rect.fromLTWH(srcX, srcY, srcWidth, srcHeight), canvasRect, paint);
 
     //プリミティブを描画
     final canvasCenter =

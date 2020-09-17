@@ -5,11 +5,10 @@ import 'package:flutter/rendering.dart';
 
 enum ActiveEdge { None, LeftEdge, TopEdge, RightEdge, BottomEdge }
 
-class TrimmingPainter {
-  //Color toolBarBackgroundColor;
+class TrimmingImagePainter {
   Color activeKnobColor;
   Color knobColor;
-  TrimmingPainter(this.knobColor, this.activeKnobColor);
+  TrimmingImagePainter(this.knobColor, this.activeKnobColor);
 
   //利用可能かどうか
   bool get isReady => (this._images != null);
@@ -49,21 +48,7 @@ class TrimmingPainter {
   int _rotation = 0;
   int _rotationIndex = 0;
   int get rotation => _rotation;
-/*  set rotation(int newValue) {
-    if (!this.isReady) return;
-    if (newValue == -90)
-      newValue = 270;
-    else if (newValue == 360) newValue = 0;
-    final i = [0, 90, 180, 270].indexOf(newValue);
-    if (i >= 0) {
-      if (_rotation != newValue) {
-        _rotation = newValue;
-        _rotationIndex = i;
-        _updated = true;
-      }
-    }
-  }
-*/
+
   void rotateLeft() {
     if (--_rotationIndex < 0) _rotationIndex = 3;
     _rotation = _rotationIndex * 90;

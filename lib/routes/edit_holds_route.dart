@@ -3,17 +3,24 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'dart:ui' as UI;
 import 'package:image_picker/image_picker.dart';
 import 'package:pono_problem_app/general/primitive_ui.dart';
 import 'package:pono_problem_app/general/problem_painter.dart';
 import 'package:pono_problem_app/records/primitive.dart';
 import 'package:pono_problem_app/records/problem.dart';
+import 'package:pono_problem_app/routes/edit_problem_route.dart';
+import 'package:pono_problem_app/routes/trimming_image_route.dart';
 import 'package:pono_problem_app/utils/menu_item.dart';
 import 'package:pono_problem_app/utils/my_dialog.dart';
 import 'package:pono_problem_app/utils/my_widget.dart';
 import 'package:pono_problem_app/utils/offset_ex.dart';
+import 'dart:ui' as UI;
+import 'package:image/image.dart' as image;
+import 'package:provider/provider.dart';
+
+import '../my_auth_notifier.dart';
 
 //MyPainterクラスからウィジェットの大きさを取得するために使用する
 GlobalKey _toolBarGlobalKey = GlobalKey();
@@ -23,47 +30,14 @@ GlobalKey _sliderGlobalKey = GlobalKey();
 class EditHoldsArgs {
   String imageURL; //ベース写真のソース(URLの場合)
   String filePath; //ベース写真のソース(ローカルパスの場合)
-  UI.Image _cachedImage; //描画毎に無限ダウンロードしてしまうので、キャッシュは必須
+  List<String> wallIDs; //ベース写真が壁IDに関連付けられている場合に設定
 
   //コンストラクタにはいずれかのパラメータを渡す
   //使用しない方はnullを設定
-  EditHoldsArgs(this.imageURL, this.filePath) {
+  EditHoldsArgs(this.imageURL, this.filePath, [this.wallIDs]) {
     if (imageURL == null && filePath == null) {
       throw Exception('EditHoldsArgsにベース写真を渡す必要があります');
     }
-  }
-
-  //BasePictureをダウンロードするためにFutureBuilderで使用する
-  Future<UI.Image> getBaseImageFutureBuilder() async {
-    var completer = new Completer<UI.Image>();
-    if (_cachedImage != null) {
-      completer.complete(_cachedImage);
-    } else {
-      if (imageURL != null) {
-        try {
-          final bundle =
-              await NetworkAssetBundle(Uri.parse(imageURL)).load(imageURL);
-          Uint8List bytes = bundle.buffer.asUint8List();
-          _cachedImage = await decodeImageFromList(bytes);
-          debugPrint("basePictureをダウンロードしました");
-          completer.complete(_cachedImage);
-        } catch (e) {
-          completer.completeError(e);
-        }
-      } else if (filePath != null) {
-        try {
-          Uint8List bytes = await File(filePath).readAsBytes();
-          _cachedImage = await decodeImageFromList(bytes);
-          debugPrint("basePictureを読み込みました");
-          completer.complete(_cachedImage);
-        } catch (e) {
-          completer.completeError(e);
-        }
-      } else {
-        completer.completeError('EditHoldsArgs()にパラメータが設定されていません');
-      }
-    }
-    return completer.future;
   }
 }
 
@@ -79,6 +53,8 @@ class _EditHoldsState extends State<EditHolds>
   //前画面から渡されたパラメータを保持
   EditHoldsArgs _arguments;
 
+  Future<UI.Image> _baseImageFuture;
+
   //UIウィジェットの現在値を保持
   PrimitiveSizeType _sizeMenuSelectedValue = PrimitiveSizeType.M;
   Color _colorMenuSelectedValue = Colors.redAccent;
@@ -93,47 +69,38 @@ class _EditHoldsState extends State<EditHolds>
   //MyPainterクラスに渡す、描画パラメータを保持
   final _paintArgs = ProblemPainter();
 
+  final GlobalKey _repaintBoundaryKey = GlobalKey();
+
   //Animation<int> _patternIndex;
   AnimationController _animationController;
   //Timer _intervalTimer;
 
+  bool _captureAndMoveToTrim = false;
+
   @override
   void initState() {
+    super.initState();
+
     _animationController = AnimationController(
         duration: const Duration(milliseconds: 500), vsync: this);
-    if (_paintArgs != null)
-      _paintArgs.patternIndex =
-          Tween(begin: 0, end: 3).animate(_animationController)
-            ..addListener(() {
-              setState(() {});
-            });
 
-    super.initState();
-    //WidgetsBinding.instance.addPostFrameCallback((_) => afterBuild(context));
+    _paintArgs.patternIndex =
+        IntTween(begin: 0, end: 3).animate(_animationController)
+          ..addListener(() {
+            setState(() {
+              _paintArgs.setUpdate();
+            });
+          });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => afterBuild(context));
   }
 
-  /*
   //buildが完了したときに呼び出される
-  void afterBuild(context) {
-    //インターバルタイマーを開始する
-    _intervalTimer = Timer.periodic(
-      Duration(milliseconds: 800),
-      (_) {
-        //再描画を減らすため、プリミティブが未選択の場合は更新しない
-        if (_paintArgs.selectedPrimitiveIndex < 0) return;
-        setState(() {
-          _paintArgs.patternIndex++;
-        });
-      },
-    );
-  }*/
+  void afterBuild(context) {}
 
   @override
   void dispose() {
     _animationController.dispose();
-    /*//インターバルタイマーを終了させる
-    if (_intervalTimer != null) _intervalTimer.cancel();
-     */
     super.dispose();
   }
 
@@ -144,123 +111,174 @@ class _EditHoldsState extends State<EditHolds>
       _arguments = ModalRoute.of(context).settings.arguments;
       if (_arguments == null) {
         throw Exception('edit_holds_routeにEditHoldsArgsクラスを渡してください');
+      } else {
+        _baseImageFuture = MyWidget.getImageFuture(
+            url: _arguments.imageURL, path: _arguments.filePath);
       }
     }
 
-    return WillPopScope(
-        //WillPopScopeで戻るボタンのタップをキャッチ
-        onWillPop: _requestPop,
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text(Problem.baseName + 'の編集'),
-            centerTitle: true,
-            actions: [
-              FlatButton(
-                child: Icon(Icons.check,
-                    color: Theme.of(context).primaryColorLight),
-                onPressed: _moveToProblemEdit,
-              ),
-              /*Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Icon(Icons.check),
-              ),*/
-            ],
-          ),
-          body: FutureBuilder(
-              //ベース写真のダウンロードを待つ
-              future: _arguments.getBaseImageFutureBuilder(),
-              builder: (BuildContext context, future) {
-                if (future == null || (!future.hasData && !future.hasError))
-                  return MyWidget.loading(context);
-                if (future.hasError)
-                  return MyWidget.error(context, future.error.toString());
+    //認証情報を得る
+    final auth = Provider.of<MyAuthNotifier>(context, listen: false);
+    String errMsg;
+    switch (auth.reason) {
+      case MyAuthNotifyReason.FBUserLost:
+        errMsg = '認証ユーザーが失われました';
+        break;
+      case MyAuthNotifyReason.FBUserChanged:
+        errMsg = '認証ユーザーが変更されました';
+        break;
+      case MyAuthNotifyReason.UserDeleted:
+        errMsg = 'ユーザーが削除されました';
+        break;
+      default:
+        //念のため
+        if (auth.firebaseUser == null) {
+          errMsg = '認証ユーザーが失われました';
+          break;
+        } else if (auth.currentUser == null) {
+          errMsg = '認証ユーザーが削除されました';
+          break;
+        }
+    }
+    auth.resetReason();
+    if (errMsg != null) {
+      // エラーがのでダイアログ表示後にホームに戻す
+      Future.delayed(Duration.zero).then((_) async {
+        await MyDialog.ok(context,
+            caption: 'エラー', labelText: errMsg, dismissible: false);
+        Navigator.of(context).popUntil(ModalRoute.withName("/"));
+      });
+      return MyWidget.empty(context, scaffold: true);
+    }
 
-                if (_paintArgs.baseImage == null) {
-                  //ベース写真を描画クラスに渡す
-                  _paintArgs.baseImage = future.data;
-                }
+    return FutureBuilder(
+        //ベース写真のダウンロードを待つ
+        future: _baseImageFuture, //_arguments.getBaseImageFutureBuilder(),
+        builder: (BuildContext context, future) {
+          if (future == null || (!future.hasData && !future.hasError))
+            return MyWidget.loading(context, scaffold: true);
+          if (future.hasError) if (true)
+            return MyWidget.error(context,
+                detail: future.error.toString(), scaffold: true);
 
-                return Stack(children: <Widget>[
-                  GestureDetector(
-                    /* Android(S6 Edge)
+          if (_paintArgs.baseImage == null) {
+            //ベース写真を描画クラスに渡す
+            _paintArgs.baseImage = future.data;
+          }
+
+          return WillPopScope(
+              //WillPopScopeで戻るボタンのタップをキャッチ
+              onWillPop: _requestPop,
+              child: Scaffold(
+                  appBar: AppBar(
+                    title: Text(Problem.baseName + 'の編集'),
+                    centerTitle: true,
+                    actions: [
+                      FlatButton(
+                        child: Icon(Icons.check,
+                            color: Theme.of(context).primaryColorLight),
+                        onPressed: _moveToTrimming,
+                      ),
+                      /*Padding(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Icon(Icons.check),
+                      ),*/
+                    ],
+                  ),
+                  body: _buildBody(context, auth)));
+        });
+  }
+
+  Widget _buildBody(BuildContext context, auth) {
+    final widget = Stack(children: <Widget>[
+      GestureDetector(
+        /* Android(S6 Edge)
                *  タップ時    onPanDown onPanCancel onTap
                *  ドラッグ時  onPanDown onPanSTart onPanUpdate onPanEnd
                */
 
-                    // TapDownイベントを検知
-                    //onTapDown: _addPoint,
-                    onTap: () {
-                      //debugPrint("onTap");
-                      _selectPrimitive(_panDowmPosition);
-                    },
-                    onPanDown: (details) {
-                      //debugPrint("onPanDown");
-                      _panDowmPosition = details.localPosition;
-                    },
-                    onPanCancel: () {
-                      debugPrint("onPanCancel");
-                    },
-                    onPanStart: (detail) {
-                      debugPrint("onPanStart");
-                    },
-                    onPanUpdate: (details) {
-                      //debugPrint("onPanUpdate");
-                      _moveBaseImage(details.delta.dx, details.delta.dy);
-                    },
-                    onPanEnd: (detail) {
-                      debugPrint("onPanEnd");
-                    },
+        // TapDownイベントを検知
+        //onTapDown: _addPoint,
+        onTap: () {
+          //debugPrint("onTap");
+          _selectPrimitive(_panDowmPosition);
+        },
+        onPanDown: (details) {
+          //debugPrint("onPanDown");
+          _panDowmPosition = details.localPosition;
+        },
+        onPanCancel: () {
+          debugPrint("onPanCancel");
+        },
+        onPanStart: (detail) {
+          debugPrint("onPanStart");
+        },
+        onPanUpdate: (details) {
+          //debugPrint("onPanUpdate");
+          _moveBaseImage(details.delta.dx, details.delta.dy);
+        },
+        onPanEnd: (detail) {
+          debugPrint("onPanEnd");
+        },
 
-                    // カスタムペイント
-                    child: CustomPaint(
-                      painter: MyHoldsPainter(_paintArgs),
-                      // タッチを有効にするため、childが必要
-                      child: Center(),
-                    ),
-                  ),
-                  Align(
-                      //画面上部のツールバー
-                      alignment: Alignment.topCenter,
-                      child: Container(
-                          padding: const EdgeInsets.only(top: 0, bottom: 0),
-                          constraints:
-                              BoxConstraints.tightFor(height: 80.0), //ツールバーの高さ
-                          child: Row(
-                            key: _toolBarGlobalKey,
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            //crossAxisAlignment: CrossAxisAlignment.start,
-                            children: _generateToolBarItems(),
-                          ))),
-                  Align(
-                      //画面下部のスライダー
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                          key: _sliderGlobalKey,
-                          padding: const EdgeInsets.only(top: 0, bottom: 0),
-                          constraints:
-                              BoxConstraints.tightFor(height: 64.0), //スライダーの高さ
-                          child: Row(children: <Widget>[
-                            Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-                                child: Text('表示サイズ')),
-                            Expanded(
-                                child: Slider(
-                              value: _paintArgs.displaySize,
-                              min: ProblemPainter.DISPLAY_SIZE_MIN,
-                              max: ProblemPainter.DISPLAY_SIZE_MAX,
-                              divisions: 20,
-                              onChanged: (double newValue) {
-                                setState(() {
-                                  //表示スケールを更新
-                                  _paintArgs.displaySize = newValue;
-                                });
-                              },
-                            ))
-                          ])))
-                ]);
-              }),
-        ));
+        // 描画結果を画像に保存するためのRepaintBoundary
+        child: RepaintBoundary(
+            key: _repaintBoundaryKey,
+            // カスタムペイント
+            child: CustomPaint(
+              painter: MyHoldsPainter(_paintArgs, !_captureAndMoveToTrim),
+              // タッチを有効にするため、childが必要
+              child: Center(),
+            )),
+      ),
+      if (!_captureAndMoveToTrim)
+        Align(
+            //画面上部のツールバー
+            alignment: Alignment.topCenter,
+            child: Container(
+                padding: const EdgeInsets.only(top: 0, bottom: 0),
+                constraints: BoxConstraints.tightFor(height: 80.0), //ツールバーの高さ
+                child: Row(
+                  key: _toolBarGlobalKey,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  //crossAxisAlignment: CrossAxisAlignment.start,
+                  children: _generateToolBarItems(),
+                ))),
+      if (!_captureAndMoveToTrim)
+        Align(
+            //画面下部のスライダー
+            alignment: Alignment.bottomCenter,
+            child: Container(
+                key: _sliderGlobalKey,
+                padding: const EdgeInsets.only(top: 0, bottom: 0),
+                constraints: BoxConstraints.tightFor(height: 64.0), //スライダーの高さ
+                child: Row(children: <Widget>[
+                  Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+                      child: Text('表示サイズ')),
+                  Expanded(
+                      child: Slider(
+                    value: _paintArgs.displaySize,
+                    min: ProblemPainter.DISPLAY_SIZE_MIN,
+                    max: ProblemPainter.DISPLAY_SIZE_MAX,
+                    divisions: ProblemPainter.DISPLAY_SIZE_DIV,
+                    onChanged: (double newValue) {
+                      setState(() {
+                        //表示スケールを更新
+                        _paintArgs.displaySize = newValue;
+                      });
+                    },
+                  ))
+                ])))
+    ]);
+
+    if (_captureAndMoveToTrim) {
+      _captureAndMoveToTrim = false;
+      _moveToTrimming2(auth);
+    }
+
+    return widget;
   }
 
   //appBarの戻るボタン "←" がタップされた
@@ -277,8 +295,87 @@ class _EditHoldsState extends State<EditHolds>
   }
 
   //appBarのチェックボタン "✔" がタップされた
-  void _moveToProblemEdit() async {
-    //TODO Ｐｒｏｂｌｅｍクラスが無ければ生成、あればプリミティブ一覧を更新
+  void _moveToTrimming() {
+    if (!_captureAndMoveToTrim) {
+      //トリミングのために結果画像をキャプチャするが、その前に再描画する
+      _captureAndMoveToTrim = true;
+
+      //キャプチャするために大きさを調整、再描画
+      setState(() {
+        _paintArgs.displaySize = 1.0; //scale2;
+        _paintArgs.baseImagePosition = Offset(_paintArgs.baseImage.width / 2.0,
+            _paintArgs.baseImage.height / 2.0);
+        _paintArgs.selectedPrimitiveIndex = -1;
+      });
+    }
+  }
+
+  //appBarのチェックボタン "✔" がタップされたの、続き（再描画後）
+  void _moveToTrimming2(MyAuthNotifier auth) {
+    Future.delayed(Duration.zero).then((_) async {
+      //✔ボタンがタップされた後の続きの処理を行う
+
+      //ホールドを配置した画像をウイジェットからキャプチャする
+      RenderRepaintBoundary boundary =
+          _repaintBoundaryKey.currentContext.findRenderObject();
+      UI.Image uiImage = await boundary.toImage(pixelRatio: 1.0);
+
+      debugPrint("UI.Imageのサイズは ${uiImage.width} x ${uiImage.height}");
+      debugPrint(
+          "キャンバスのサイズは ${_paintArgs.canvasSize.width} x ${_paintArgs.canvasSize.height}");
+
+      //キャプチャした画像はキャンバス全体であるため、ベース写真が描画された部分
+      //だけを取り出す
+      double bw = _paintArgs.baseImage.width * _paintArgs.actualScale;
+      double bh = _paintArgs.baseImage.height * _paintArgs.actualScale;
+
+      double bcx = _paintArgs.baseImagePosition.dx / _paintArgs.baseImage.width;
+      double bcy =
+          _paintArgs.baseImagePosition.dy / _paintArgs.baseImage.height;
+
+      int left = (_paintArgs.canvasSize.width / 2.0 - bw * bcx).toInt();
+      int top = (_paintArgs.canvasSize.height / 2.0 - bh * bcy).toInt();
+      int right =
+          (_paintArgs.canvasSize.width / 2.0 + bw * (1.0 - bcx)).toInt();
+      int bottom =
+          (_paintArgs.canvasSize.height / 2.0 + bh * (1.0 - bcy)).toInt();
+
+      debugPrint("クリップ範囲は L:$left T:$top R:$right B:$bottom");
+
+      final byteData = await uiImage.toByteData(format: UI.ImageByteFormat.png);
+      Uint8List bytes = byteData.buffer.asUint8List();
+      image.Image imImage = image.decodeImage(bytes);
+      image.Image croppedImage =
+          image.copyCrop(imImage, left, top, right - left, bottom - top);
+
+      //トリミング画面に移動
+      final trimResult = await Navigator.of(context).pushNamed(
+              '/edit_problem/trimming_image',
+              arguments: TrimmingImageArgs(imImage: croppedImage))
+          as TrimmingResult;
+      if (trimResult == null) {
+        //キャンセルされたので再描画
+        setState(() {
+          _paintArgs.setUpdate();
+        });
+        return;
+      }
+
+      final newProblem = Problem(
+          trimResult.trimLeft,
+          trimResult.trimTop,
+          trimResult.trimRight,
+          trimResult.trimBottom,
+          _paintArgs.primitives
+              .map((primitive) => primitive)
+              .toList(growable: false),
+          auth.currentUserID);
+      final args =
+          EditProblemArgs(_paintArgs.baseImage, newProblem, _arguments.wallIDs);
+
+      await Navigator.of(context)
+          .pushNamed('/edit_problem/edit_problem', arguments: args);
+    });
   }
 
   //タップされたときのプリミティブ選択処理
@@ -363,9 +460,15 @@ class _EditHoldsState extends State<EditHolds>
 
     //アニメーションの起動と停止
     if (_paintArgs.selectedPrimitiveIndex >= 0) {
-      if (!_animationController.isAnimating) _animationController.repeat();
+      if (!_animationController.isAnimating) {
+        _animationController.repeat();
+        debugPrint("アニメーション開始");
+      }
     } else {
-      if (_animationController.isAnimating) _animationController.reset();
+      if (_animationController.isAnimating) {
+        _animationController.reset();
+        debugPrint("アニメーション停止");
+      }
     }
   }
 
@@ -557,9 +660,15 @@ class _EditHoldsState extends State<EditHolds>
     //現在の設定からプリミティブを生成、追加
     final primitive = PrimitiveUI(primitiveType, _paintArgs.baseImagePosition,
         _sizeMenuSelectedValue, _colorMenuSelectedValue);
-    setState(() {
-      _paintArgs.addPrimitive(primitive, true);
-    });
+    _paintArgs.addPrimitive(primitive, true);
+
+    //アニメーションの起動
+    if (!_animationController.isAnimating) {
+      _animationController.repeat();
+      debugPrint("アニメーション開始");
+    }
+
+    setState(() {});
   }
 
   //選択中のプリミティブを削除する
@@ -579,8 +688,9 @@ class _EditHoldsState extends State<EditHolds>
 
 class MyHoldsPainter extends CustomPainter {
   final ProblemPainter _paintArgs;
+  bool _drawToolbar;
 
-  MyHoldsPainter(this._paintArgs);
+  MyHoldsPainter(this._paintArgs, this._drawToolbar);
 
   @override
   bool shouldRepaint(MyHoldsPainter oldDelegate) {
@@ -607,15 +717,17 @@ class MyHoldsPainter extends CustomPainter {
     //メインの描画
     _paintArgs.paint(canvas, canvasSize);
 
-    //画面上部のツールバーと画面下部のスライダーの背景を半透明で塗りつぶして
-    //UIが見えるようにする
-    final paint = Paint();
-    paint.color = Color.fromARGB(200, 255, 255, 255);
-    canvas.drawRect(
-        Rect.fromLTWH(0, 0, canvasSize.width, toolBarSize.height), paint);
-    canvas.drawRect(
-        Rect.fromLTWH(0, canvasSize.height - sliderSize.height,
-            canvasSize.width, sliderSize.height),
-        paint);
+    if (this._drawToolbar) {
+      //画面上部のツールバーと画面下部のスライダーの背景を半透明で塗りつぶして
+      //UIが見えるようにする
+      final paint = Paint();
+      paint.color = Color.fromARGB(200, 255, 255, 255);
+      canvas.drawRect(
+          Rect.fromLTWH(0, 0, canvasSize.width, toolBarSize.height), paint);
+      canvas.drawRect(
+          Rect.fromLTWH(0, canvasSize.height - sliderSize.height,
+              canvasSize.width, sliderSize.height),
+          paint);
+    }
   }
 }

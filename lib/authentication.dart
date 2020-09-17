@@ -8,7 +8,7 @@ import 'package:pono_problem_app/records/user_datastore.dart';
 import 'package:provider/provider.dart';
 
 import 'globals.dart';
-import 'my_theme.dart';
+import 'my_theme_notifier.dart';
 
 class Authentication {
   // googleログイン

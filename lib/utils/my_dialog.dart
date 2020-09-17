@@ -1,4 +1,20 @@
 import 'package:flutter/material.dart';
+import 'my_widget.dart';
+
+/*
+ダイアログの表示
+  inputText
+  selectYesNo
+  ok
+  selectItem
+  checkItems
+
+スナックバーの表示
+  successfulSnackBar
+  informationSnackBar
+  hintSnackBar
+  errorSnackBar
+*/
 
 enum MyDialogResult { OK, Cancel, Yes, No }
 
@@ -18,6 +34,18 @@ class MyDialogItem {
   final Icon icon;
   final String text;
   MyDialogItem(this.text, {this.icon});
+}
+
+class MyDialogCheckedItem {
+  final String text;
+  final String value; //表示には使わない。ユーザー側の値保持
+  MyDialogCheckedItem(this.text, {this.value});
+}
+
+class MyDialogArrayResult {
+  final MyDialogResult result;
+  final List list;
+  MyDialogArrayResult(this.result, [this.list]);
 }
 
 class MyDialog {
@@ -152,7 +180,7 @@ class MyDialog {
   //返り値.value は選択されたアイテムの１から始まるインデックスを返す
   //dismissの場合はnullを返す
   static Future<MyDialogIntResult> selectItem(
-      BuildContext context, setState, List<MyDialogItem> items,
+      BuildContext context, List<MyDialogItem> items,
       {String caption = '',
       String label = '',
       String cancelButtonCaption = 'キャンセル',
@@ -201,45 +229,95 @@ class MyDialog {
     );
     return result;
   }
-/*
-  static Future<MyDialogResult> upload(
-      BuildContext context, StorageUploadTask task) async {
-    final result = await showDialog(
-      barrierDismissible: true,
-      context: context,
-      builder: (BuildContext context) {
-        return StreamBuilder(
-            stream: task.events,
-            builder: (BuildContext context, snapshot) {
-              if (task.isComplete) {
-                Navigator.of(context).pop((task.isSuccessful)
-                    ? MyDialogResult.OK
-                    : MyDialogResult.Cancel); //代用
 
+  //項目選択ダイアログ
+  //初期選択が必要な場合は、selectedValueに選択したい、itemsのvalue値の配列を渡す
+  //アイテムが選択された場合は 返り値.result=MyDialogResult.OK を返し、
+  //※返り値(MyDialogArrayResult.list)の形式は returnSelectedValues で変更できる
+  //  true(default): listは選択されたアイテムのvalue値を格納する
+  //  false: listの長さはitemsの長さと一致。選択されたアイテムはtrue,それ以外はfalseが格納される
+  //dismissの場合はnullを返す
+  //チェックの結果はOKやキャンセルに関わらず、パラメータの items を直接書き換えるので注意。
+  static Future<MyDialogArrayResult> checkItems(
+      BuildContext context, List<MyDialogCheckedItem> items,
+      {List<String> selectedValue,
+      String caption = '',
+      String label = '',
+      int minCount = 0,
+      String okButtonCaption = 'OK',
+      String cancelButtonCaption = 'キャンセル',
+      bool dismissible = true,
+      bool returnSelectedValues = true}) async {
+    final ar = <bool>[];
+    for (int i = 0; i < items.length; i++) {
+      ar.add(
+          selectedValue != null && selectedValue.indexOf(items[i].value) >= 0);
+    }
+
+    final MyDialogArrayResult result = await showDialog(
+        barrierDismissible: dismissible,
+        context: context,
+        builder: (BuildContext context) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              var itemWidgets = <Widget>[
+                if (label.length > 0)
+                  Padding(padding: const EdgeInsets.all(16), child: Text(label))
+              ];
+
+              for (var i = 0; i < items.length; i++) {
+                itemWidgets.add(CheckboxListTile(
+                  title: Text(items[i].text), //    <-- label
+                  value: ar[i],
+                  onChanged: (newValue) {
+                    setState(() {
+                      ar[i] = !ar[i];
+                    });
+                  },
+                ));
               }
 
-              if (snapshot.hasData) {
-                final StorageTaskEvent event = snapshot.data;
-                final StorageTaskSnapshot snap = event.snapshot;
-                if (event.type == StorageTaskEventType.success) {
-                  Navigator.of(context).pop(MyDialogResult.OK); //代用
-                } else if (event.type == StorageTaskEventType.failure) {
-                  Navigator.of(context).pop(MyDialogResult.Cancel); //代用
-                }
-              }
-              return SimpleDialog(
-                title: Text("アップロードしています"),
-                backgroundColor: Colors.transparent,
-                children: <Widget>[
-                  CircularProgressIndicator(),
+              return AlertDialog(
+                title: Text(caption),
+                content: SingleChildScrollView(
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min, //ダイアログの、縦に間延び防止
+                        children: itemWidgets)),
+                actions: <Widget>[
+                  FlatButton(
+                      child: Text(cancelButtonCaption),
+                      onPressed: () {
+                        Navigator.of(context)
+                            .pop(MyDialogArrayResult(MyDialogResult.Cancel));
+                      }),
+                  FlatButton(
+                      child: Text(okButtonCaption),
+                      onPressed: () {
+                        int count = 0;
+                        ar.forEach((element) {
+                          if (element) count++;
+                        });
+                        if (count >= minCount) {
+                          var selectedList;
+                          if (returnSelectedValues) {
+                            selectedList = <String>[];
+                            for (int i = 0; i < items.length; i++) {
+                              if (ar[i]) selectedList.add(items[i].value);
+                            }
+                          } else {
+                            selectedList = ar;
+                          }
+                          Navigator.of(context).pop(MyDialogArrayResult(
+                              MyDialogResult.OK, selectedList));
+                        }
+                      }),
                 ],
               );
-            });
-      },
-    );
+            },
+          );
+        });
     return result;
   }
- */
 
   /*
    * SnackBarは画面下にツールチップのように表示するものです。
@@ -249,93 +327,43 @@ class MyDialog {
    * MyDialog.successfulSnackBar(_scaffoldKey, '削除しました');
    */
 
+  // 成功ウイジェットを表示。ウィジェットだけなら MyWidget.successfulSnackBar（） を使う
   static successfulSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
       {int displaySeconds = 10}) {
     if (scaffoldKey.currentState == null)
       throw 'successfulSnackBar() scaffoldKey.currentStateがnullのため、スナックバーは表示されません！';
     else
       scaffoldKey.currentState.showSnackBar(
-          successfulSnackBarWidget(text, displaySeconds: displaySeconds));
+          MyWidget.successfulSnackBar(text, displaySeconds: displaySeconds));
   }
 
-  static Widget successfulSnackBarWidget(String text,
-      {int displaySeconds = 10}) {
-    return SnackBar(
-      content: Row(children: <Widget>[
-        Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: Icon(Icons.check, color: Colors.greenAccent)),
-        Expanded(child: Text(text))
-      ]),
-      duration: Duration(seconds: displaySeconds),
-      action: SnackBarAction(
-        label: 'OK',
-        onPressed: () {},
-      ),
-    );
-  }
-
+  // 情報ウイジェットを表示。ウィジェットだけなら MyWidget.informationSnackBar（） を使う
   static informationSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
       {int displaySeconds = 10}) {
     if (scaffoldKey.currentState == null)
       throw 'informationSnackBar() scaffoldKey.currentStateがnullのため、スナックバーは表示されません！';
     else
-      scaffoldKey.currentState.showSnackBar(SnackBar(
-        content: Row(children: <Widget>[
-          Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: Icon(Icons.info_outline, color: Colors.blueAccent)),
-          Expanded(child: Text(text))
-        ]),
-        duration: Duration(seconds: displaySeconds),
-        action: SnackBarAction(
-          label: 'OK',
-          onPressed: () {},
-        ),
-      ));
+      scaffoldKey.currentState.showSnackBar(
+          MyWidget.informationSnackBar(text, displaySeconds: displaySeconds));
   }
 
+  // ヒントウイジェットを表示。ウィジェットだけなら MyWidget.hintSnackBar（） を使う
   static hintSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
       {int displaySeconds = 10}) {
     if (scaffoldKey.currentState == null)
       throw 'hintSnackBar() scaffoldKey.currentStateがnullのため、スナックバーは表示されません！';
     else
-      scaffoldKey.currentState.showSnackBar(SnackBar(
-        content: Row(children: <Widget>[
-          Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: Icon(Icons.lightbulb_outline, color: Colors.yellow)),
-          Expanded(child: Text(text))
-        ]),
-        duration: Duration(seconds: displaySeconds),
-        action: SnackBarAction(
-          label: 'OK',
-          onPressed: () {},
-        ),
-      ));
+      scaffoldKey.currentState.showSnackBar(
+          MyWidget.hintSnackBar(text, displaySeconds: displaySeconds));
   }
 
+  // ヒントウイジェットを表示。ウィジェットだけなら MyWidget.errorSnackBar（） を使う
   static errorSnackBar(GlobalKey<ScaffoldState> scaffoldKey, String text,
       {int displaySeconds = 10}) {
     if (scaffoldKey.currentState == null)
       throw 'errorSnackBar() scaffoldKey.currentStateがnullのため、スナックバーは表示されません！';
     else
-      scaffoldKey.currentState.showSnackBar(SnackBar(
-        content: Row(children: <Widget>[
-          Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-              child: Icon(
-                Icons.error,
-                color: Colors.redAccent,
-              )),
-          Expanded(child: Text(text))
-        ]),
-        duration: Duration(seconds: displaySeconds),
-        action: SnackBarAction(
-          label: 'OK',
-          onPressed: () {},
-        ),
-      ));
+      scaffoldKey.currentState.showSnackBar(
+          MyWidget.errorSnackBar(text, displaySeconds: displaySeconds));
   }
 }

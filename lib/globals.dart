@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:pono_problem_app/my_auth_notifier.dart';
 import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user.dart';
@@ -11,7 +12,7 @@ import 'package:pono_problem_app/records/user.dart';
 import 'package:pono_problem_app/records/user_ref.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'my_theme.dart';
+import 'my_theme_notifier.dart';
 import 'authentication.dart';
 
 //※ enumアイテム名で設定に保存するので、名称変更しないこと
@@ -54,20 +55,31 @@ class Globals {
     return true;
   }
 
-  /* 現在のユーザー情報を保持。 保存はされない */
+  /* 現在のユーザー情報を保持。 ファイル保存はされない */
 
+/*
   static FirebaseUser _firebaseUser;
-  static get firebaseUser => _firebaseUser;
+  static FirebaseUser get firebaseUser => _firebaseUser;
 
   static UserDocument _curUserDoc;
-  static get currentUserDocument => _curUserDoc;
-  static get currentUser => (_curUserDoc == null) ? null : _curUserDoc.data;
-  static get currentUserID => (_curUserDoc == null) ? null : _curUserDoc.docId;
+  static UserDocument get currentUserDocument => _curUserDoc;
+  static User get currentUser =>
+      (_curUserDoc == null) ? null : _curUserDoc.data;
+  static String get currentUserID =>
+      (_curUserDoc == null) ? null : _curUserDoc.docId;
 
   static bool _admin = false;
-  static get isCurrentUserAdmin => (_firebaseUser == null) ? false : _admin;
+  static bool get isCurrentUserAdmin =>
+      (_firebaseUser == null) ? false : _admin;
 
-  // 認証・ログインが済んだらこれで登録
+  // MyAuthNotifierから設定される
+  static setCurrentUser(FirebaseUser fbUser,UserDocument userDoc, bool admin) {
+    _firebaseUser=fbUser;
+    _curUserDoc=userDoc;
+    _admin=admin;
+  }
+*/
+  /*// 認証・ログインが済んだらこれで登録
   // 結果を取得したいときは Globals.isCurrentUserAdmin を参照する。
   // .then(bool changed)
   static Future<bool> setCurrentUser(UserDocument userDoc) {
@@ -97,8 +109,9 @@ class Globals {
       completer.completeError('カレントユーザーは存在しません');
     });
     return completer.future;
-  }
+  }*/
 
+  /*
   // 現在のユーザーのadmin情報を更新する
   // admin属性を持っている場合のみtrueを返す。その他はfalse
   static Future<bool> reloadAdmin() {
@@ -120,4 +133,6 @@ class Globals {
       return completer.future;
     }
   }
+   */
+
 }
